@@ -1,0 +1,2194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#10B981" />
+<title>EcoMap KZ — карта переработки и EcoCoins</title>
+
+<!-- Leaflet (если CDN недоступен — включится стилизованная fallback-карта) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+/* ============================================================
+   1. ТОКЕНЫ И БАЗА
+   ============================================================ */
+:root{
+  --bg:#F8FAFC;
+  --card:#FFFFFF;
+  --ink:#0F172A;
+  --muted:#64748B;
+  --muted-2:#94A3B8;
+  --line:#E7ECF3;
+
+  --brand:#10B981;
+  --brand-dark:#059669;
+  --brand-soft:#ECFDF5;
+
+  --amber:#F59E0B;
+  --amber-soft:#FFFBEB;
+  --red:#EF4444;
+  --red-soft:#FEF2F2;
+  --blue:#3B82F6;
+
+  --r-lg:22px;
+  --r-md:16px;
+  --r-sm:12px;
+
+  --sh-1:0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.04);
+  --sh-2:0 8px 24px rgba(15,23,42,.08);
+  --sh-3:0 24px 60px rgba(15,23,42,.16);
+
+  --tab-h:66px;
+  --top-h:64px;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior:none;
+}
+body.modal-open{overflow:hidden}
+button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input,select{font-family:inherit}
+h1,h2,h3,h4,p{margin:0}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ============================================================
+   2. КАРКАС ПРИЛОЖЕНИЯ
+   ============================================================ */
+.app{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+
+/* --- Topbar --- */
+.topbar{
+  height:var(--top-h);flex:0 0 auto;
+  display:flex;align-items:center;gap:12px;
+  padding:0 16px;
+  background:rgba(255,255,255,.86);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+  z-index:1200;
+}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{
+  width:36px;height:36px;border-radius:12px;flex:0 0 auto;
+  background:linear-gradient(140deg,var(--brand),var(--brand-dark));
+  display:grid;place-items:center;color:#fff;font-size:19px;
+  box-shadow:0 6px 16px rgba(16,185,129,.35);
+}
+.brand-text{display:flex;align-items:baseline;gap:4px;font-size:16px;letter-spacing:-.02em}
+.brand-text b{font-weight:800}
+.brand-text span{font-weight:600;color:var(--brand-dark)}
+
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+.lang-switch{
+  display:flex;background:#EEF2F7;border-radius:999px;padding:3px;gap:2px;
+}
+.lang-opt{
+  padding:6px 11px;border-radius:999px;font-size:12.5px;font-weight:700;
+  color:var(--muted);transition:.18s;letter-spacing:.02em;
+}
+.lang-opt.active{background:#fff;color:var(--ink);box-shadow:var(--sh-1)}
+
+.coin-pill{
+  display:flex;align-items:center;gap:7px;
+  background:var(--brand-soft);
+  border:1px solid #C7F0DF;
+  border-radius:999px;
+  padding:6px 13px 6px 7px;
+  font-size:14px;font-weight:800;color:var(--brand-dark);
+  transition:transform .25s cubic-bezier(.34,1.56,.64,1);
+}
+.coin-pill.bump{transform:scale(1.12)}
+.coin-icon{
+  width:22px;height:22px;border-radius:50%;
+  background:linear-gradient(140deg,#34D399,var(--brand-dark));
+  color:#fff;font-size:11px;font-weight:900;
+  display:grid;place-items:center;flex:0 0 auto;
+}
+.coin-icon.lg{width:30px;height:30px;font-size:14px}
+
+/* --- Оболочка --- */
+.shell{flex:1 1 auto;display:flex;min-height:0}
+.content{flex:1 1 auto;min-width:0;position:relative;overflow:hidden;background:var(--bg)}
+
+/* --- Sidebar (desktop) --- */
+.sidebar{display:none;flex-direction:column;gap:4px;width:236px;flex:0 0 auto;
+  padding:16px 12px;background:#fff;border-right:1px solid var(--line)}
+.sidebar-foot{margin-top:auto;padding:14px;border-radius:var(--r-md);
+  background:linear-gradient(160deg,#ECFDF5,#F0FDFA);border:1px solid #D1FAE5}
+.sidebar-foot b{display:block;font-size:13px;margin-bottom:2px}
+.sidebar-foot span{font-size:11.5px;color:var(--muted);line-height:1.4;display:block}
+
+/* --- Tabbar (mobile) --- */
+.tabbar{
+  flex:0 0 auto;height:var(--tab-h);
+  display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+  background:rgba(255,255,255,.94);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+  z-index:1100;
+}
+
+/* --- Пункт навигации (общий для sidebar и tabbar) --- */
+.nav-item{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 14px;border-radius:13px;
+  color:var(--muted);font-size:14px;font-weight:600;
+  transition:background .18s,color .18s,transform .12s;
+  text-align:left;width:100%;
+}
+.nav-item svg{width:20px;height:20px;flex:0 0 auto;stroke:currentColor;fill:none;
+  stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.nav-item:hover{background:#F1F5F9;color:var(--ink)}
+.nav-item.active{background:var(--brand-soft);color:var(--brand-dark);font-weight:700}
+.nav-item.active svg{stroke:var(--brand-dark)}
+
+.tabbar .nav-item{
+  flex-direction:column;gap:3px;justify-content:center;
+  font-size:10.5px;font-weight:600;padding:8px 2px;border-radius:0;
+  color:var(--muted-2);
+}
+.tabbar .nav-item .nl{font-size:10.5px;letter-spacing:.01em}
+.tabbar .nav-item.active{background:none;color:var(--brand-dark)}
+.tabbar .nav-item svg{width:22px;height:22px}
+
+/* ============================================================
+   3. УТИЛИТЫ И КОМПОНЕНТЫ
+   ============================================================ */
+.view{display:none;height:100%;flex-direction:column;min-height:0}
+.view.active{display:flex}
+.view-scroll{flex:1 1 auto;overflow-y:auto;padding:20px 16px 32px;-webkit-overflow-scrolling:touch}
+.wrap{max-width:1040px;margin:0 auto;width:100%}
+
+.page-title{font-size:23px;font-weight:800;letter-spacing:-.03em;margin-bottom:4px}
+.page-sub{font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:20px}
+
+.section-title{font-size:15px;font-weight:800;letter-spacing:-.01em;margin:24px 0 12px;
+  display:flex;align-items:center;justify-content:space-between}
+.section-title .count{font-size:12px;font-weight:600;color:var(--muted-2)}
+
+.card{background:var(--card);border-radius:var(--r-lg);box-shadow:var(--sh-1);
+  border:1px solid var(--line);padding:16px}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:13px 18px;border-radius:14px;font-size:14px;font-weight:700;
+  transition:transform .12s,box-shadow .2s,background .2s,opacity .2s;
+  white-space:nowrap;
+}
+.btn:active{transform:scale(.975)}
+.btn.primary{background:linear-gradient(140deg,var(--brand),var(--brand-dark));color:#fff;
+  box-shadow:0 8px 20px rgba(16,185,129,.32)}
+.btn.primary:hover{box-shadow:0 10px 26px rgba(16,185,129,.42)}
+.btn.ghost{background:#F1F5F9;color:var(--ink)}
+.btn.ghost:hover{background:#E7ECF3}
+.btn.outline{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+.btn.outline:hover{border-color:var(--brand);color:var(--brand-dark)}
+.btn.sm{padding:9px 14px;font-size:13px;border-radius:11px}
+.btn.block{width:100%}
+.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none}
+.btn .ico{font-size:15px;line-height:1}
+
+.icon-btn{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  background:#F1F5F9;color:var(--muted);font-size:15px;transition:.18s;flex:0 0 auto}
+.icon-btn:hover{background:#E2E8F0;color:var(--ink)}
+
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+  font-size:11.5px;font-weight:700;letter-spacing:.01em}
+.pill.green{background:var(--brand-soft);color:var(--brand-dark)}
+.pill.amber{background:var(--amber-soft);color:#B45309}
+.pill.red{background:var(--red-soft);color:#B91C1C}
+.pill.grey{background:#F1F5F9;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 auto}
+.dot.pulse{animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.bar{height:7px;border-radius:99px;background:#EEF2F7;overflow:hidden}
+.bar > i{display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--brand),#34D399);transition:width .6s cubic-bezier(.4,0,.2,1)}
+.bar.amber > i{background:linear-gradient(90deg,#F59E0B,#FBBF24)}
+.bar.red > i{background:linear-gradient(90deg,#EF4444,#F87171)}
+
+.muted{color:var(--muted)}
+.tiny{font-size:11.5px}
+
+/* ============================================================
+   4. КАРТА
+   ============================================================ */
+.map-wrap{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+#map{flex:1 1 auto;min-height:240px;background:#EDF2F7;position:relative;z-index:1}
+
+/* --- Фильтры --- */
+.filters{
+  position:absolute;top:0;left:0;right:0;z-index:600;
+  display:flex;gap:8px;padding:12px 12px 26px;
+  overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  background:linear-gradient(180deg,rgba(248,250,252,.97) 30%,rgba(248,250,252,0));
+  pointer-events:none;
+}
+.filters::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;pointer-events:auto;
+  display:inline-flex;align-items:center;gap:6px;
+  padding:9px 15px;border-radius:999px;background:#fff;
+  border:1px solid var(--line);box-shadow:var(--sh-1);
+  font-size:13px;font-weight:600;color:var(--muted);
+  transition:.18s;white-space:nowrap;
+}
+.chip:hover{border-color:#CBD5E1;color:var(--ink)}
+.chip.active{background:var(--ink);border-color:var(--ink);color:#fff;box-shadow:0 6px 16px rgba(15,23,42,.22)}
+.chip .e{font-size:14px;line-height:1}
+
+/* --- Переключатель города --- */
+.city-switch{
+  position:absolute;left:12px;bottom:16px;z-index:600;
+  display:flex;background:#fff;border-radius:999px;padding:4px;
+  box-shadow:var(--sh-2);border:1px solid var(--line);
+}
+.city-switch button{
+  padding:8px 15px;border-radius:999px;font-size:12.5px;font-weight:700;color:var(--muted);transition:.18s;
+}
+.city-switch button.active{background:var(--brand);color:#fff;box-shadow:0 4px 12px rgba(16,185,129,.35)}
+
+/* --- Leaflet-пины --- */
+.pin{background:none;border:0}
+.pin-dot{
+  width:38px;height:38px;border-radius:50% 50% 50% 6px;
+  transform:rotate(45deg);
+  background:#fff;border:3px solid var(--c,#10B981);
+  display:grid;place-items:center;
+  box-shadow:0 6px 18px rgba(15,23,42,.22);
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1),box-shadow .2s;
+}
+.pin-dot span{transform:rotate(-45deg);font-size:15px;line-height:1}
+.pin-dot:hover{transform:rotate(45deg) scale(1.14)}
+.pin-dot.is-active{transform:rotate(45deg) scale(1.24);box-shadow:0 8px 24px rgba(16,185,129,.5)}
+
+/* --- Fallback-карта (если Leaflet не загрузился) --- */
+.fallback-map{position:relative;overflow:hidden;
+  background:
+    radial-gradient(circle at 22% 28%,rgba(16,185,129,.10),transparent 42%),
+    radial-gradient(circle at 76% 68%,rgba(59,130,246,.10),transparent 46%),
+    repeating-linear-gradient(0deg,#E9EFF6 0 1px,transparent 1px 46px),
+    repeating-linear-gradient(90deg,#E9EFF6 0 1px,transparent 1px 46px),
+    #F2F6FA;
+}
+.fb-pin{position:absolute;transform:translate(-50%,-50%);z-index:5;transition:transform .2s}
+.fb-pin .pin-dot{transform:rotate(45deg)}
+.fb-pin:hover{transform:translate(-50%,-50%) scale(1.1);z-index:9}
+.fb-label{position:absolute;left:50%;top:100%;transform:translateX(-50%) rotate(0);
+  margin-top:6px;font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap;
+  background:rgba(255,255,255,.85);padding:2px 6px;border-radius:6px}
+
+/* ============================================================
+   5. КАРТОЧКА ПУНКТА (SHEET)
+   ============================================================ */
+.sheet-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.32);z-index:1400;
+  opacity:0;pointer-events:none;transition:opacity .28s}
+.sheet-backdrop.show{opacity:1;pointer-events:auto}
+
+.point-sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:1500;
+  background:#fff;border-radius:26px 26px 0 0;
+  box-shadow:var(--sh-3);
+  max-height:82dvh;overflow-y:auto;
+  padding:10px 18px calc(20px + env(safe-area-inset-bottom));
+  transform:translateY(102%);
+  transition:transform .34s cubic-bezier(.32,.72,0,1);
+}
+.point-sheet.open{transform:translateY(0)}
+.sheet-grab{width:42px;height:4px;border-radius:99px;background:#E2E8F0;margin:0 auto 14px}
+
+.sheet-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+.sheet-head h3{font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.badge-pro{display:inline-flex;align-items:center;gap:5px;margin-top:6px;
+  padding:4px 9px;border-radius:7px;font-size:10.5px;font-weight:800;letter-spacing:.03em;
+  background:linear-gradient(135deg,#0F172A,#334155);color:#fff;text-transform:uppercase}
+.badge-pro::before{content:"✓";color:#34D399;font-weight:900}
+
+.sheet-meta{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted);
+  margin-bottom:14px;line-height:1.5}
+.sheet-meta b{color:var(--ink);font-weight:700}
+.stars{color:#F59E0B;font-weight:700}
+
+.fill-block{background:#F8FAFC;border-radius:14px;padding:12px 14px;margin-bottom:16px}
+.fill-head{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);
+  margin-bottom:8px;font-weight:600}
+.fill-head b{color:var(--ink)}
+
+.frac-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted-2);margin-bottom:10px}
+.frac-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.frac-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;
+  background:#F8FAFC;border:1px solid #EEF2F7}
+.frac-row .fe{font-size:17px;width:24px;text-align:center}
+.frac-row .fn{font-size:13.5px;font-weight:600;flex:1}
+.frac-row .fr{font-size:12.5px;font-weight:800;color:var(--brand-dark);white-space:nowrap}
+.frac-row .fr small{font-weight:600;color:var(--muted-2);font-size:10.5px}
+.frac-row.off{opacity:.45}
+.frac-row.off .fr{color:var(--muted-2)}
+
+.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sheet-actions .btn{padding:14px 10px;font-size:13.5px}
+.sheet-link{display:flex;justify-content:center;margin-top:12px}
+.sheet-link button{font-size:13px;font-weight:700;color:var(--brand-dark);padding:8px}
+
+/* ============================================================
+   6. AI-СКАНЕР
+   ============================================================ */
+.scanner-stage{
+  position:relative;border-radius:var(--r-lg);overflow:hidden;
+  background:radial-gradient(circle at 50% 30%,#1E293B,#0B1220 75%);
+  aspect-ratio:4/3;max-height:330px;display:grid;place-items:center;
+  margin-bottom:16px;box-shadow:var(--sh-2);
+}
+.scanner-frame{position:relative;width:58%;aspect-ratio:1;max-width:230px}
+.scan-corner{position:absolute;width:32px;height:32px;border:3px solid var(--brand);border-radius:8px}
+.scan-corner.tl{top:0;left:0;border-right:0;border-bottom:0;border-radius:10px 0 0 0}
+.scan-corner.tr{top:0;right:0;border-left:0;border-bottom:0;border-radius:0 10px 0 0}
+.scan-corner.bl{bottom:0;left:0;border-right:0;border-top:0;border-radius:0 0 0 10px}
+.scan-corner.br{bottom:0;right:0;border-left:0;border-top:0;border-radius:0 0 10px 0}
+.scan-line{position:absolute;left:6%;right:6%;height:2px;border-radius:99px;
+  background:linear-gradient(90deg,transparent,#34D399,transparent);
+  box-shadow:0 0 18px 2px rgba(52,211,153,.85);
+  animation:scanline 2.4s ease-in-out infinite}
+@keyframes scanline{0%,100%{top:8%}50%{top:90%}}
+.scan-hint{position:absolute;bottom:16px;left:0;right:0;text-align:center;
+  font-size:12px;color:#94A3B8;font-weight:600;letter-spacing:.02em}
+.scan-glyph{position:absolute;inset:0;display:grid;place-items:center;font-size:52px;opacity:.16}
+.scanner-stage.scanning .scan-line{animation:scanline .7s ease-in-out infinite}
+.scanner-stage.scanning .scan-glyph{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.scan-tests{display:grid;grid-template-columns:1fr;gap:9px}
+.scan-test{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;
+  background:#fff;border:1px solid var(--line);border-radius:15px;
+  box-shadow:var(--sh-1);transition:.18s;text-align:left;width:100%;
+}
+.scan-test:hover{border-color:var(--brand);box-shadow:0 6px 20px rgba(16,185,129,.16);transform:translateY(-1px)}
+.scan-test .ste{font-size:20px}
+.scan-test .stt{flex:1;min-width:0}
+.scan-test .stt b{display:block;font-size:13.5px;font-weight:700}
+.scan-test .stt span{font-size:11.5px;color:var(--muted)}
+.scan-test .stc{font-size:11px;font-weight:800;color:var(--muted-2);
+  background:#F1F5F9;border-radius:7px;padding:4px 8px}
+
+.verdict{border-radius:var(--r-lg);padding:18px;margin-bottom:16px;border:1px solid;
+  animation:pop .3s cubic-bezier(.34,1.56,.64,1)}
+.verdict.ok{background:var(--brand-soft);border-color:#BBF7D0}
+.verdict.no{background:var(--red-soft);border-color:#FECACA}
+.verdict.warn{background:var(--amber-soft);border-color:#FDE68A}
+.verdict-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.verdict-ico{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;
+  font-size:22px;background:#fff;box-shadow:var(--sh-1);flex:0 0 auto}
+.verdict-head b{display:block;font-size:15.5px;font-weight:800;letter-spacing:-.01em}
+.verdict-head span{font-size:12px;color:var(--muted);font-weight:600}
+
+.steps{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.step{display:flex;gap:11px;align-items:flex-start}
+.step-n{width:22px;height:22px;border-radius:50%;background:#fff;color:var(--brand-dark);
+  font-size:11.5px;font-weight:900;display:grid;place-items:center;flex:0 0 auto;
+  box-shadow:var(--sh-1);margin-top:1px}
+.step p{font-size:13px;line-height:1.5;color:#334155}
+
+/* ============================================================
+   7. МАРКЕТПЛЕЙС
+   ============================================================ */
+.balance-card{
+  border-radius:24px;padding:20px;color:#fff;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,#059669 0%,#10B981 55%,#34D399 100%);
+  box-shadow:0 16px 40px rgba(16,185,129,.32);margin-bottom:18px;
+}
+.balance-card::after{
+  content:"";position:absolute;width:220px;height:220px;border-radius:50%;
+  background:rgba(255,255,255,.13);right:-70px;top:-90px;
+}
+.balance-card::before{
+  content:"";position:absolute;width:140px;height:140px;border-radius:50%;
+  background:rgba(255,255,255,.10);right:40px;bottom:-80px;
+}
+.bc-top{display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1}
+.bc-label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+.bc-value{display:flex;align-items:center;gap:9px;font-size:36px;font-weight:900;
+  letter-spacing:-.03em;margin:6px 0 2px;line-height:1}
+.bc-value .coin-icon{background:rgba(255,255,255,.28);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.5)}
+.bc-level{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;
+  background:rgba(255,255,255,.22);padding:5px 12px;border-radius:999px;margin-top:8px;
+  backdrop-filter:blur(6px)}
+.bc-progress{margin-top:16px;position:relative;z-index:1}
+.bc-progress .bar{background:rgba(255,255,255,.28);height:8px}
+.bc-progress .bar > i{background:#fff}
+.bc-progress-text{display:flex;justify-content:space-between;font-size:11.5px;
+  font-weight:700;opacity:.9;margin-top:7px}
+.bc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px;
+  position:relative;z-index:1}
+.bc-stat{background:rgba(255,255,255,.17);border-radius:14px;padding:10px 8px;text-align:center;
+  backdrop-filter:blur(6px)}
+.bc-stat b{display:block;font-size:15px;font-weight:900;letter-spacing:-.02em}
+.bc-stat span{font-size:10.5px;font-weight:600;opacity:.88}
+
+.reward-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+.reward{
+  background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px;
+  box-shadow:var(--sh-1);display:flex;flex-direction:column;gap:8px;transition:.2s;position:relative;
+}
+.reward:hover{transform:translateY(-2px);box-shadow:var(--sh-2);border-color:#D1FAE5}
+.reward-emoji{font-size:28px;line-height:1}
+.reward-title{font-size:13.5px;font-weight:700;line-height:1.3;letter-spacing:-.01em}
+.reward-partner{font-size:11px;color:var(--muted);font-weight:600}
+.reward-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:6px}
+.reward-cost{display:inline-flex;align-items:center;gap:5px;font-size:13.5px;font-weight:900;color:var(--brand-dark)}
+.reward-cost .coin-icon{width:17px;height:17px;font-size:9px}
+.reward-tag{position:absolute;top:10px;right:10px;font-size:9.5px;font-weight:900;
+  letter-spacing:.05em;text-transform:uppercase;padding:3px 7px;border-radius:6px;
+  background:var(--amber-soft);color:#B45309}
+
+.challenge{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;
+  margin-bottom:10px;box-shadow:var(--sh-1)}
+.challenge-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.challenge-emoji{width:40px;height:40px;border-radius:12px;background:var(--brand-soft);
+  display:grid;place-items:center;font-size:19px;flex:0 0 auto}
+.challenge-head b{display:block;font-size:13.5px;font-weight:800}
+.challenge-head span{font-size:11.5px;color:var(--muted);font-weight:600}
+.challenge-progress{display:flex;justify-content:space-between;font-size:11.5px;
+  font-weight:700;color:var(--muted);margin-top:8px}
+
+.coupon{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);
+  border-radius:16px;padding:14px;margin-bottom:10px;box-shadow:var(--sh-1)}
+.coupon-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  font-weight:800;color:var(--brand-dark);background:var(--brand-soft);
+  padding:6px 10px;border-radius:9px;letter-spacing:.06em}
+
+/* ============================================================
+   8. ЭКО-ТАКСИ
+   ============================================================ */
+.field{margin-bottom:16px}
+.field-label{display:block;font-size:12px;font-weight:800;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted-2);margin-bottom:8px}
+.input,.select{
+  width:100%;padding:14px 15px;border-radius:14px;border:1.5px solid var(--line);
+  background:#fff;font-size:14px;font-weight:600;color:var(--ink);outline:none;transition:.18s;
+}
+.input:focus,.select:focus{border-color:var(--brand);box-shadow:0 0 0 4px rgba(16,185,129,.13)}
+.select{appearance:none;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 15px center;padding-right:40px}
+
+.volume-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.volume-opt{
+  padding:14px 8px;border-radius:15px;border:1.5px solid var(--line);background:#fff;
+  text-align:center;transition:.18s;
+}
+.volume-opt .ve{font-size:22px;display:block;margin-bottom:6px}
+.volume-opt b{display:block;font-size:12.5px;font-weight:800}
+.volume-opt span{font-size:10.5px;color:var(--muted);font-weight:600}
+.volume-opt.active{border-color:var(--brand);background:var(--brand-soft);
+  box-shadow:0 6px 18px rgba(16,185,129,.18)}
+.volume-opt.active b{color:var(--brand-dark)}
+
+.summary{background:#F8FAFC;border-radius:18px;padding:16px;border:1px solid var(--line);margin-bottom:16px}
+.summary-row{display:flex;justify-content:space-between;align-items:center;
+  font-size:13.5px;padding:7px 0;color:var(--muted);font-weight:600}
+.summary-row b{color:var(--ink);font-weight:800}
+.summary-row.total{border-top:1px dashed #CBD5E1;margin-top:8px;padding-top:14px;font-size:16px}
+.summary-row.total b{font-size:19px;color:var(--brand-dark);letter-spacing:-.02em}
+
+.coins-slider{display:flex;align-items:center;gap:12px;margin-top:10px}
+.coins-slider input[type=range]{flex:1;-webkit-appearance:none;height:6px;border-radius:99px;
+  background:#E2E8F0;outline:none}
+.coins-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
+  border-radius:50%;background:var(--brand);border:3px solid #fff;box-shadow:0 2px 8px rgba(16,185,129,.5);cursor:pointer}
+.coins-slider input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;
+  background:var(--brand);border:3px solid #fff;box-shadow:0 2px 8px rgba(16,185,129,.5);cursor:pointer}
+
+.order-card{border-radius:20px;padding:18px;background:#fff;border:1px solid var(--line);
+  box-shadow:var(--sh-1);margin-bottom:14px}
+.order-status{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:800;margin-bottom:4px}
+.order-steps{display:flex;gap:6px;margin-top:16px}
+.order-steps i{flex:1;height:5px;border-radius:99px;background:#EEF2F7;transition:.4s}
+.order-steps i.done{background:var(--brand)}
+
+/* ============================================================
+   9. ПРОФИЛЬ / B2B
+   ============================================================ */
+.profile-head{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.avatar{width:62px;height:62px;border-radius:20px;flex:0 0 auto;
+  background:linear-gradient(140deg,#10B981,#0EA5E9);color:#fff;
+  display:grid;place-items:center;font-size:22px;font-weight:900;letter-spacing:-.02em;
+  box-shadow:0 10px 24px rgba(16,185,129,.3)}
+.profile-head b{display:block;font-size:18px;font-weight:800;letter-spacing:-.02em}
+.profile-head span{font-size:12.5px;color:var(--muted);font-weight:600}
+
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;
+  box-shadow:var(--sh-1)}
+.stat b{display:block;font-size:21px;font-weight:900;letter-spacing:-.03em;line-height:1.1}
+.stat span{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px;display:block}
+
+.hist-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F1F5F9}
+.hist-row:last-child{border-bottom:0}
+.hist-ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+  font-size:16px;flex:0 0 auto;background:var(--brand-soft)}
+.hist-ico.out{background:var(--amber-soft)}
+.hist-body{flex:1;min-width:0}
+.hist-body b{display:block;font-size:13px;font-weight:700;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.hist-body span{font-size:11.5px;color:var(--muted)}
+.hist-amount{font-size:14px;font-weight:900;white-space:nowrap}
+.hist-amount.pos{color:var(--brand-dark)}
+.hist-amount.neg{color:#B45309}
+
+.leader-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:13px;
+  font-size:13px;font-weight:600}
+.leader-row .rank{width:22px;font-weight:900;color:var(--muted-2);font-size:12.5px}
+.leader-row.me{background:var(--brand-soft);color:var(--brand-dark);font-weight:800}
+.leader-row .lname{flex:1}
+.leader-row .lscore{font-weight:800;font-size:12.5px}
+
+.switch-card{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#0F172A,#1E293B);
+  border-radius:20px;padding:18px;color:#fff;box-shadow:var(--sh-2);margin-bottom:20px}
+.switch-card b{display:block;font-size:14px;font-weight:800;margin-bottom:3px}
+.switch-card p{font-size:11.5px;opacity:.7;line-height:1.45;max-width:220px}
+.switch{margin-left:auto;width:52px;height:30px;border-radius:99px;background:rgba(255,255,255,.22);
+  position:relative;flex:0 0 auto;transition:.24s}
+.switch::after{content:"";position:absolute;width:24px;height:24px;border-radius:50%;background:#fff;
+  top:3px;left:3px;transition:.24s cubic-bezier(.34,1.56,.64,1)}
+.switch.on{background:var(--brand)}
+.switch.on::after{left:25px}
+
+.b2b-analytics{display:flex;align-items:flex-end;gap:8px;height:120px;padding:0 4px;margin-bottom:8px}
+.b2b-bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%}
+.b2b-bar i{width:100%;border-radius:8px 8px 3px 3px;
+  background:linear-gradient(180deg,#34D399,var(--brand-dark));transition:height .7s cubic-bezier(.4,0,.2,1)}
+.b2b-bar span{font-size:10.5px;color:var(--muted);font-weight:700}
+.b2b-bar em{font-size:10px;font-weight:800;color:var(--brand-dark);font-style:normal}
+
+/* ============================================================
+   10. МОДАЛКИ И ТОСТЫ
+   ============================================================ */
+.modal-backdrop{position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.46);
+  backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+  display:grid;place-items:center;padding:16px;animation:fade .2s ease}
+.modal{background:#fff;border-radius:26px;padding:24px;width:100%;max-width:440px;
+  max-height:88dvh;overflow-y:auto;box-shadow:var(--sh-3);
+  animation:pop .28s cubic-bezier(.34,1.4,.64,1)}
+.modal h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.modal p.sub{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:18px}
+.modal-actions{display:flex;gap:10px;margin-top:20px}
+.modal-actions .btn{flex:1}
+
+.choice{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border-radius:15px;
+  border:1.5px solid var(--line);background:#fff;margin-bottom:9px;transition:.18s;text-align:left}
+.choice:hover{border-color:var(--brand);background:var(--brand-soft)}
+.choice .ce{font-size:20px}
+.choice b{display:block;font-size:13.5px;font-weight:800}
+.choice span{font-size:11.5px;color:var(--muted)}
+
+.frac-picker{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.frac-pick{padding:9px 13px;border-radius:11px;border:1.5px solid var(--line);background:#fff;
+  font-size:12.5px;font-weight:700;color:var(--muted);transition:.18s}
+.frac-pick.active{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-dark)}
+
+.weight-display{text-align:center;padding:14px 0}
+.weight-display b{font-size:38px;font-weight:900;letter-spacing:-.04em;line-height:1}
+.weight-display span{font-size:14px;color:var(--muted);font-weight:700}
+
+.reward-calc{background:var(--brand-soft);border-radius:15px;padding:14px;text-align:center;
+  border:1px solid #BBF7D0;margin-bottom:6px}
+.reward-calc b{font-size:26px;font-weight:900;color:var(--brand-dark);letter-spacing:-.03em}
+.reward-calc span{display:block;font-size:11.5px;font-weight:700;color:var(--brand-dark);opacity:.75}
+
+.qr-wrap{display:grid;place-items:center;gap:12px;padding:8px 0 4px}
+.qr{display:grid;grid-template-columns:repeat(21,1fr);grid-template-rows:repeat(21,1fr);
+  width:186px;height:186px;background:#fff;padding:9px;border-radius:14px;
+  box-shadow:var(--sh-2);border:1px solid var(--line)}
+.qr i{display:block}
+
+#toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tab-h) + 18px);
+  z-index:3000;display:flex;flex-direction:column;gap:8px;align-items:center;
+  pointer-events:none;width:calc(100% - 32px);max-width:400px}
+.toast{
+  display:flex;align-items:center;gap:10px;
+  background:#0F172A;color:#fff;padding:12px 18px;border-radius:14px;
+  font-size:13.5px;font-weight:700;box-shadow:var(--sh-3);
+  animation:toastIn .3s cubic-bezier(.34,1.56,.64,1);
+  max-width:100%;
+}
+.toast.success{background:linear-gradient(135deg,#059669,#10B981)}
+.toast.warn{background:linear-gradient(135deg,#B45309,#F59E0B)}
+.toast .ti{font-size:16px}
+.toast.hide{animation:toastOut .28s forwards}
+
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pop{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translateY(14px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateY(10px) scale(.94)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+.fade-in{animation:slideUp .35s cubic-bezier(.4,0,.2,1) both}
+
+/* ============================================================
+   11. АДАПТИВ
+   ============================================================ */
+@media (min-width:900px){
+  .sidebar{display:flex}
+  .tabbar{display:none}
+  #toasts{bottom:24px}
+
+  .view-scroll{padding:28px 32px 40px}
+  .page-title{font-size:27px}
+
+  /* Split-screen: карта + боковая карточка */
+  .point-sheet{
+    position:absolute;left:auto;right:16px;top:88px;bottom:16px;
+    width:382px;max-height:none;border-radius:22px;
+    transform:translateX(calc(100% + 32px));
+    padding:20px;box-shadow:var(--sh-2);
+  }
+  .point-sheet.open{transform:translateX(0)}
+  .sheet-backdrop{display:none}
+  .sheet-grab{display:none}
+
+  .scan-tests{grid-template-columns:1fr 1fr 1fr}
+  .scan-tests .scan-test{flex-direction:column;align-items:flex-start;gap:8px}
+  .stat-grid{grid-template-columns:repeat(4,1fr)}
+  .sheet-actions{grid-template-columns:1fr 1fr}
+}
+
+@media (max-width:420px){
+  .bc-value{font-size:31px}
+  .reward-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ================= TOPBAR ================= -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">♻</div>
+      <div class="brand-text"><b>EcoMap</b><span>KZ</span></div>
+    </div>
+    <div class="topbar-right">
+      <div class="lang-switch" id="langSwitch">
+        <button class="lang-opt active" data-lang="ru">RU</button>
+        <button class="lang-opt" data-lang="kz">KZ</button>
+      </div>
+      <button class="coin-pill" id="coinPill" title="EcoCoins">
+        <span class="coin-icon">E</span><b id="coinValue">0</b>
+      </button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <!-- ================= SIDEBAR (desktop) ================= -->
+    <nav class="sidebar" id="sidebarNav"></nav>
+
+    <!-- ================= CONTENT ================= -->
+    <main class="content">
+
+      <!-- ---------- VIEW: MAP ---------- -->
+      <section class="view active" id="view-map">
+        <div class="map-wrap">
+          <div class="filters" id="filters"></div>
+          <div id="map"></div>
+          <div class="city-switch" id="citySwitch">
+            <button data-city="almaty" class="active">Алматы</button>
+            <button data-city="astana">Астана</button>
+          </div>
+          <div class="sheet-backdrop" id="sheetBackdrop"></div>
+          <aside class="point-sheet" id="pointSheet">
+            <div class="sheet-grab"></div>
+            <div id="pointSheetBody"></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ---------- VIEW: SCANNER ---------- -->
+      <section class="view" id="view-scan">
+        <div class="view-scroll">
+          <div class="wrap">
+            <h1 class="page-title" data-i18n="scan.title">AI-сканер маркировки</h1>
+            <p class="page-sub" data-i18n="scan.subtitle">Наведите камеру на треугольник переработки — мы подскажем, принимается ли упаковка в Казахстане и как её подготовить.</p>
+
+            <div class="scanner-stage" id="scannerStage">
+              <div class="scan-glyph">♻</div>
+              <div class="scanner-frame">
+                <span class="scan-corner tl"></span>
+                <span class="scan-corner tr"></span>
+                <span class="scan-corner bl"></span>
+                <span class="scan-corner br"></span>
+                <span class="scan-line"></span>
+              </div>
+              <div class="scan-hint" data-i18n="scan.hint">Наведите на маркировку</div>
+            </div>
+
+            <div class="section-title" data-i18n="scan.demo">Демо-сканирование</div>
+            <div class="scan-tests" id="scanTests"></div>
+
+            <div id="scanResult" style="margin-top:18px"></div>
+
+            <div class="section-title" data-i18n="scan.guide">Гид по подготовке</div>
+            <div class="card fade-in">
+              <div class="steps">
+                <div class="step"><span class="step-n">1</span><p data-i18n="guide.1">Снимите крышку и термоусадочную плёнку — они сделаны из другого пластика и принимаются отдельно.</p></div>
+                <div class="step"><span class="step-n">2</span><p data-i18n="guide.2">Сполосните тару от остатков еды — грязное сырьё принимают с наценкой или не берут вовсе.</p></div>
+                <div class="step"><span class="step-n">3</span><p data-i18n="guide.3">Сомните бутылку и снимите объём — так в бак поместится в 3 раза больше вторсырья.</p></div>
+                <div class="step"><span class="step-n">4</span><p data-i18n="guide.4">Сдавайте партией от 1 кг — за крупные партии пункты начисляют повышенные EcoCoins.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- VIEW: STORE ---------- -->
+      <section class="view" id="view-store">
+        <div class="view-scroll">
+          <div class="wrap">
+            <h1 class="page-title" data-i18n="store.title">Маркетплейс бонусов</h1>
+            <p class="page-sub" data-i18n="store.subtitle">Меняйте EcoCoins на реальные скидки и подарки от локальных партнёров Алматы и Астаны.</p>
+
+            <div id="storeBalance"></div>
+
+            <div class="section-title"><span data-i18n="store.catalog">Каталог наград</span><span class="count" id="rewardCount"></span></div>
+            <div class="reward-grid" id="rewardGrid"></div>
+
+            <div class="section-title" data-i18n="store.challenges">Эко-челленджи</div>
+            <div id="challengeList"></div>
+
+            <div id="couponSection"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- VIEW: TAXI ---------- -->
+      <section class="view" id="view-taxi">
+        <div class="view-scroll">
+          <div class="wrap">
+            <h1 class="page-title" data-i18n="taxi.title">Эко-такси</h1>
+            <p class="page-sub" data-i18n="taxi.subtitle">Крупные объёмы вторсырья заберём прямо из квартиры — оплатите до 50% стоимости накопленными EcoCoins.</p>
+            <div id="taxiContent"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- VIEW: PROFILE ---------- -->
+      <section class="view" id="view-profile">
+        <div class="view-scroll">
+          <div class="wrap">
+            <div id="profileContent"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================= TABBAR (mobile) ================= -->
+  <nav class="tabbar" id="tabbar"></nav>
+</div>
+
+<div id="toasts"></div>
+<div id="modalRoot"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ============================================================================
+   EcoMap KZ — прототип клиентского приложения
+   Стек: Vanilla JS, без сборщиков. Данные — localStorage.
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   1. СЛОВАРЬ ЛОКАЛИЗАЦИИ
+   --------------------------------------------------------------------------- */
+const I18N = {
+  ru: {
+    'nav.map': 'Карта', 'nav.scan': 'Сканер', 'nav.store': 'Бонусы', 'nav.taxi': 'Эко-такси', 'nav.profile': 'Профиль',
+    'sidebar.hint': 'Сдавайте вторсырьё и получайте EcoCoins у партнёров.',
+    'filter.all': 'Все',
+    'f.pet': 'ПЭТ (01)', 'f.hdpe': 'ПНД (02)', 'f.glass': 'Стекло', 'f.paper': 'Картон/Бумага',
+    'f.alu': 'Алюминий', 'f.hazmat': 'Опасные отходы',
+    'status.open': 'Работает', 'status.filling': 'Бак заполняется', 'status.full': 'Переполнено', 'status.closed': 'Закрыто',
+    'point.verified': 'PRO · Верифицирован', 'point.fill': 'Заполненность бака',
+    'point.accepts': 'Принимаемые фракции', 'point.hours': 'График', 'point.rating': 'Рейтинг',
+    'point.update': 'Обновить статус', 'point.checkin': 'Сдать вторсырьё',
+    'point.route': 'Построить маршрут', 'point.notAccept': 'не принимает',
+    'point.perKg': 'за кг',
+    'scan.title': 'AI-сканер маркировки',
+    'scan.subtitle': 'Наведите камеру на треугольник переработки — мы подскажем, принимается ли упаковка в Казахстане и как её подготовить.',
+    'scan.hint': 'Наведите на маркировку', 'scan.demo': 'Демо-сканирование', 'scan.guide': 'Гид по подготовке',
+    'scan.accepted': 'Принимается в Казахстане', 'scan.rejected': 'Не перерабатывается в РК',
+    'scan.findPoint': 'Показать ближайший пункт', 'scan.rescan': 'Сканировать заново',
+    'guide.1': 'Снимите крышку и термоусадочную плёнку — они сделаны из другого пластика и принимаются отдельно.',
+    'guide.2': 'Сполосните тару от остатков еды — грязное сырьё принимают с наценкой или не берут вовсе.',
+    'guide.3': 'Сомните бутылку и снимите объём — так в бак поместится в 3 раза больше вторсырья.',
+    'guide.4': 'Сдавайте партией от 1 кг — за крупные партии пункты начисляют повышенные EcoCoins.',
+    'store.title': 'Маркетплейс бонусов',
+    'store.subtitle': 'Меняйте EcoCoins на реальные скидки и подарки от локальных партнёров Алматы и Астаны.',
+    'store.catalog': 'Каталог наград', 'store.challenges': 'Эко-челленджи', 'store.myCoupons': 'Мои купоны',
+    'store.balance': 'Мой баланс', 'store.toNext': 'до следующего уровня',
+    'store.kg': 'кг сдано', 'store.co2': 'кг CO₂', 'store.deals': 'сдач',
+    'store.redeem': 'Обменять', 'store.need': 'не хватает',
+    'taxi.title': 'Эко-такси',
+    'taxi.subtitle': 'Крупные объёмы вторсырья заберём прямо из квартиры — оплатите до 50% стоимости накопленными EcoCoins.',
+    'taxi.volume': 'Объём вторсырья', 'taxi.address': 'Адрес подачи', 'taxi.date': 'Дата', 'taxi.slot': 'Слот времени',
+    'taxi.price': 'Стоимость вывоза', 'taxi.payCoins': 'Оплатить EcoCoins', 'taxi.toPay': 'К оплате курьеру',
+    'taxi.order': 'Вызвать эко-такси', 'taxi.active': 'Активный заказ', 'taxi.courier': 'Курьер назначен',
+    'taxi.eta': 'приедет в', 'taxi.cancel': 'Отменить заказ',
+    'profile.title': 'Профиль', 'profile.history': 'История операций',
+    'profile.leader': 'Рейтинг студентов Алматы', 'profile.b2b': 'Режим партнёра / Приёмщика (B2B)',
+    'profile.b2bSub': 'Управляйте точкой, меняйте Live-статус и начисляйте EcoCoins клиентам.',
+    'b2b.myPoint': 'Моя точка приёма', 'b2b.setStatus': 'Изменить Live-статус',
+    'b2b.award': 'Начислить EcoCoins клиенту', 'b2b.phone': 'Телефон клиента', 'b2b.weight': 'Вес, кг',
+    'b2b.awardBtn': 'Начислить', 'b2b.analytics': 'Сдано за месяц, кг',
+    'common.cancel': 'Отмена', 'common.confirm': 'Подтвердить', 'common.close': 'Закрыть', 'common.kg': 'кг',
+    'common.coins': 'EcoCoins', 'common.done': 'Готово', 'common.back': 'Назад'
+  },
+  kz: {
+    'nav.map': 'Карта', 'nav.scan': 'Сканер', 'nav.store': 'Бонустар', 'nav.taxi': 'Эко-такси', 'nav.profile': 'Профиль',
+    'sidebar.hint': 'Қайталама шикізат тапсырып, серіктестерден EcoCoins алыңыз.',
+    'filter.all': 'Барлығы',
+    'f.pet': 'ПЭТ (01)', 'f.hdpe': 'ПНД (02)', 'f.glass': 'Шыны', 'f.paper': 'Қағаз/Картон',
+    'f.alu': 'Алюминий', 'f.hazmat': 'Қауіпті қалдықтар',
+    'status.open': 'Жұмыс істеп тұр', 'status.filling': 'Бак толып келеді', 'status.full': 'Асып кеткен', 'status.closed': 'Жабық',
+    'point.verified': 'PRO · Верификацияланған', 'point.fill': 'Бактың толуы',
+    'point.accepts': 'Қабылданатын фракциялар', 'point.hours': 'Кесте', 'point.rating': 'Рейтинг',
+    'point.update': 'Мәртебені жаңарту', 'point.checkin': 'Шикізат тапсыру',
+    'point.route': 'Маршрут құру', 'point.notAccept': 'қабылдамайды',
+    'point.perKg': 'кг үшін',
+    'scan.title': 'AI таңбалау сканері',
+    'scan.subtitle': 'Камераны қайта өңдеу үшбұрышына бағыттаңыз — қаптама Қазақстанда қабылдана ма және оны қалай дайындау керектігін айтамыз.',
+    'scan.hint': 'Таңбалауға бағыттаңыз', 'scan.demo': 'Демо-сканерлеу', 'scan.guide': 'Дайындау жөніндегі нұсқаулық',
+    'scan.accepted': 'Қазақстанда қабылданады', 'scan.rejected': 'ҚР-да қайта өңделмейді',
+    'scan.findPoint': 'Ең жақын пунктті көрсету', 'scan.rescan': 'Қайта сканерлеу',
+    'guide.1': 'Қақпақты және терможиылыстырғыш пленканы алыңыз — олар басқа пластиктен жасалған.',
+    'guide.2': 'Ыдысты тағам қалдықтарынан шайыңыз — лас шикізат қабылданбайды.',
+    'guide.3': 'Бөтелкені басып, көлемін азайтыңыз — бакқа 3 есе көп сыяды.',
+    'guide.4': '1 кг-нан бастап топтап тапсырыңыз — ірі партияларға жоғары EcoCoins беріледі.',
+    'store.title': 'Бонустар маркетплейсі',
+    'store.subtitle': 'EcoCoins-ты Алматы мен Астананың жергілікті серіктестерінің нақты жеңілдіктеріне айырбастаңыз.',
+    'store.catalog': 'Марапаттар каталогы', 'store.challenges': 'Эко-челлендждер', 'store.myCoupons': 'Менің купондарым',
+    'store.balance': 'Менің балансым', 'store.toNext': 'келесі деңгейге дейін',
+    'store.kg': 'кг тапсырылды', 'store.co2': 'кг CO₂', 'store.deals': 'тапсыру',
+    'store.redeem': 'Айырбастау', 'store.need': 'жетпейді',
+    'taxi.title': 'Эко-такси',
+    'taxi.subtitle': 'Үлкен көлемдегі шикізатты пәтерден алып кетеміз — құнның 50%-ына дейін EcoCoins-пен төлеңіз.',
+    'taxi.volume': 'Шикізат көлемі', 'taxi.address': 'Беру мекенжайы', 'taxi.date': 'Күні', 'taxi.slot': 'Уақыт аралығы',
+    'taxi.price': 'Шығару құны', 'taxi.payCoins': 'EcoCoins-пен төлеу', 'taxi.toPay': 'Курьерге төлеу',
+    'taxi.order': 'Эко-такси шақыру', 'taxi.active': 'Белсенді тапсырыс', 'taxi.courier': 'Курьер тағайындалды',
+    'taxi.eta': 'келеді', 'taxi.cancel': 'Тапсырысты болдырмау',
+    'profile.title': 'Профиль', 'profile.history': 'Операциялар тарихы',
+    'profile.leader': 'Алматы студенттерінің рейтингі', 'profile.b2b': 'Серіктес / Қабылдаушы режимі (B2B)',
+    'profile.b2bSub': 'Пунктті басқарыңыз, Live-мәртебені өзгертіңіз және клиенттерге EcoCoins есептеңіз.',
+    'b2b.myPoint': 'Менің қабылдау пунктім', 'b2b.setStatus': 'Live-мәртебені өзгерту',
+    'b2b.award': 'Клиентке EcoCoins есептеу', 'b2b.phone': 'Клиенттің телефоны', 'b2b.weight': 'Салмағы, кг',
+    'b2b.awardBtn': 'Есептеу', 'b2b.analytics': 'Ай ішінде тапсырылды, кг',
+    'common.cancel': 'Болдырмау', 'common.confirm': 'Растау', 'common.close': 'Жабу', 'common.kg': 'кг',
+    'common.coins': 'EcoCoins', 'common.done': 'Дайын', 'common.back': 'Артқа'
+  }
+};
+
+/* ---------------------------------------------------------------------------
+   2. СПРАВОЧНИКИ: ФРАКЦИИ, СТАТУСЫ, ТОЧКИ
+   --------------------------------------------------------------------------- */
+const FRACTIONS = {
+  pet:    { key:'pet',    i18n:'f.pet',    icon:'🧴', rate:50  },
+  hdpe:   { key:'hdpe',   i18n:'f.hdpe',   icon:'🧼', rate:40  },
+  glass:  { key:'glass',  i18n:'f.glass',  icon:'🍾', rate:15  },
+  paper:  { key:'paper',  i18n:'f.paper',  icon:'📦', rate:20  },
+  alu:    { key:'alu',    i18n:'f.alu',    icon:'🥫', rate:120 },
+  hazmat: { key:'hazmat', i18n:'f.hazmat', icon:'🔋', rate:200 }
+};
+const FRACTION_ORDER = ['pet','hdpe','glass','paper','alu','hazmat'];
+
+const STATUS_META = {
+  open:    { i18n:'status.open',    color:'#10B981', cls:'green' },
+  filling: { i18n:'status.filling', color:'#F59E0B', cls:'amber' },
+  full:    { i18n:'status.full',    color:'#EF4444', cls:'red'   },
+  closed:  { i18n:'status.closed',  color:'#EF4444', cls:'red'   }
+};
+
+const POINTS = [
+  /* -------- Алматы -------- */
+  { id:'al1', city:'almaty', name:'EcoPoint Al-Farabi', address:'пр. Аль-Фараби, 77',
+    lat:43.2280, lng:76.9560, dist:'1.2 км', hours:'08:00 – 20:00', rating:4.8,
+    verified:true, status:'open', fill:35, accepts:['pet','hdpe','paper','alu'] },
+  { id:'al2', city:'almaty', name:'Taza Qala', address:'ул. Сатпаева, 30',
+    lat:43.2400, lng:76.9300, dist:'2.4 км', hours:'09:00 – 19:00', rating:4.5,
+    verified:false, status:'filling', fill:85, accepts:['pet','glass','paper'] },
+  { id:'al3', city:'almaty', name:'Recycle Hub Dostyk Plaza', address:'пр. Достык, 132',
+    lat:43.2350, lng:76.9700, dist:'3.1 км', hours:'10:00 – 22:00', rating:4.9,
+    verified:true, status:'open', fill:20, accepts:['pet','hdpe','glass','paper','alu','hazmat'] },
+  { id:'al4', city:'almaty', name:'Green Point Розыбакиева', address:'ул. Розыбакиева, 245',
+    lat:43.2230, lng:76.8900, dist:'4.8 км', hours:'08:00 – 18:00', rating:4.2,
+    verified:false, status:'closed', fill:60, accepts:['pet','paper','alu'] },
+  { id:'al5', city:'almaty', name:'EcoBox Абая', address:'пр. Абая, 150',
+    lat:43.2420, lng:76.9100, dist:'2.9 км', hours:'круглосуточно', rating:4.6,
+    verified:true, status:'open', fill:48, accepts:['pet','hdpe','glass','paper','alu'] },
+  { id:'al6', city:'almaty', name:'Алматы Эко Сервис', address:'ул. Толе би, 101',
+    lat:43.2500, lng:76.9400, dist:'3.6 км', hours:'09:00 – 20:00', rating:4.4,
+    verified:true, status:'full', fill:98, accepts:['pet','glass','hazmat'] },
+  { id:'al7', city:'almaty', name:'EcoMarket Жандосова', address:'ул. Жандосова, 55',
+    lat:43.2130, lng:76.9200, dist:'5.2 км', hours:'08:00 – 21:00', rating:4.7,
+    verified:false, status:'open', fill:30, accepts:['pet','hdpe','paper','alu'] },
+  { id:'al8', city:'almaty', name:'GreenCity Саина', address:'ул. Саина, 20',
+    lat:43.2200, lng:76.8500, dist:'7.4 км', hours:'08:00 – 20:00', rating:4.3,
+    verified:true, status:'open', fill:15, accepts:['pet','paper','glass'] },
+  /* -------- Астана -------- */
+  { id:'as1', city:'astana', name:'EcoPoint Expo', address:'пр. Мангилик Ел, 53',
+    lat:51.1694, lng:71.4491, dist:'1.5 км', hours:'09:00 – 21:00', rating:4.9,
+    verified:true, status:'open', fill:25, accepts:['pet','hdpe','glass','paper','alu','hazmat'] },
+  { id:'as2', city:'astana', name:'Taza Astana Hub', address:'ул. Кабанбай батыра, 15',
+    lat:51.1600, lng:71.4300, dist:'2.7 км', hours:'08:00 – 19:00', rating:4.5,
+    verified:false, status:'filling', fill:78, accepts:['pet','paper','alu'] },
+  { id:'as3', city:'astana', name:'GreenLine Есиль', address:'ул. Достык, 5',
+    lat:51.1450, lng:71.4600, dist:'4.1 км', hours:'10:00 – 20:00', rating:4.6,
+    verified:true, status:'open', fill:40, accepts:['pet','glass','hazmat'] },
+  { id:'as4', city:'astana', name:'EcoBox Сарыарка', address:'пр. Республики, 72',
+    lat:51.1800, lng:71.4200, dist:'3.3 км', hours:'круглосуточно', rating:4.1,
+    verified:false, status:'closed', fill:55, accepts:['pet','hdpe','paper'] }
+];
+
+const CITY_CENTER = {
+  almaty: { lat:43.2380, lng:76.9450, zoom:12,
+            box:{ minLat:43.195, maxLat:43.275, minLng:76.820, maxLng:77.000 } },
+  astana: { lat:51.1600, lng:71.4400, zoom:12,
+            box:{ minLat:51.120, maxLat:51.200, minLng:71.380, maxLng:71.500 } }
+};
+
+const REWARDS = [
+  { id:'r1', emoji:'☕', title:'Бесплатный капучино', partner:'Coffee Point · Алматы', cost:150, tag:'Хит' },
+  { id:'r2', emoji:'🥤', title:'Скидка 20% на напиток', partner:'Brew House', cost:80 },
+  { id:'r3', emoji:'🍔', title:'Промокод 1 000 ₸', partner:'FoodDelivery KZ', cost:300, tag:'Выгодно' },
+  { id:'r4', emoji:'🎬', title:'Билет в кино 2D', partner:'Kinopark', cost:250 },
+  { id:'r5', emoji:'🛒', title:'Скидка 15% на эко-продукты', partner:'Green Market', cost:120 },
+  { id:'r6', emoji:'🛴', title:'30 минут самоката', partner:'Samokat KZ', cost:100 },
+  { id:'r7', emoji:'👕', title:'Шоппер EcoMap', partner:'EcoMap KZ', cost:400, tag:'Мерч' },
+  { id:'r8', emoji:'🌱', title:'Посадить дерево в Алматы', partner:'GreenCity', cost:200 }
+];
+
+const CHALLENGES = [
+  { id:'c1', emoji:'♻️', title:'Сдай 5 кг пластика', partner:'Coffee Point · награда: бесплатный кофе', progress:3.2, goal:5, unit:'кг' },
+  { id:'c2', emoji:'🎯', title:'10 сдач за месяц', partner:'EcoMap KZ · награда: 500 EcoCoins', progress:6, goal:10, unit:'шт' }
+];
+
+const LEVELS = [
+  { min:0,    ru:'Эко-новичок',        kz:'Эко-жаңадан бастаушы' },
+  { min:300,  ru:'Эко-активист',       kz:'Эко-белсенді' },
+  { min:800,  ru:'Эко-герой',          kz:'Эко-батыр' },
+  { min:1500, ru:'Амбассадор Алматы',  kz:'Алматы елшісі' }
+];
+
+/* ---------------------------------------------------------------------------
+   3. СОСТОЯНИЕ + PERSISTENCE
+   --------------------------------------------------------------------------- */
+const LS_KEY = 'ecomap_kz_v1';
+let state;
+let currentView = 'map';
+
+function defaultState(){
+  return {
+    lang: 'ru',
+    city: 'almaty',
+    filter: 'all',
+    coins: 380,
+    earned: 1240,
+    totalKg: 12.4,
+    co2: 24.8,
+    checkins: 14,
+    history: [
+      { id:'h1', type:'in',  title:'Сдача ПЭТ · 2.4 кг',        sub:'EcoPoint Al-Farabi',   amount:120, date:'12 мая, 18:40' },
+      { id:'h2', type:'out', title:'Капучино в Coffee Point',    sub:'Купон #CP-8842',       amount:-150, date:'10 мая, 09:12' },
+      { id:'h3', type:'in',  title:'Сдача алюминия · 1.1 кг',    sub:'Recycle Hub Dostyk',   amount:132, date:'8 мая, 12:05'  },
+      { id:'h4', type:'in',  title:'Бонус за обновление статуса', sub:'Краудсорсинг',        amount:5,   date:'7 мая, 20:31'  },
+      { id:'h5', type:'in',  title:'Сдача картона · 3.0 кг',     sub:'EcoBox Абая',          amount:60,  date:'5 мая, 15:20'  }
+    ],
+    coupons: [],
+    orders: [],
+    pointOverrides: {},   // { pointId: { status, fill } }
+    b2b: false,
+    b2bPoint: 'al1'
+  };
+}
+
+function loadState(){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch(e){ saved = null; }
+  state = Object.assign(defaultState(), saved || {});
+  // применяем сохранённые оверрайды статусов точек
+  Object.keys(state.pointOverrides || {}).forEach(id=>{
+    const p = POINTS.find(x=>x.id===id);
+    if(p) Object.assign(p, state.pointOverrides[id]);
+  });
+}
+function save(){
+  try {
+    const overrides = {};
+    POINTS.forEach(p=>{ overrides[p.id] = { status:p.status, fill:p.fill }; });
+    state.pointOverrides = overrides;
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  } catch(e){ /* приватный режим — просто игнорируем */ }
+}
+
+/* ---------------------------------------------------------------------------
+   4. УТИЛИТЫ
+   --------------------------------------------------------------------------- */
+const $  = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function t(key){
+  const dict = I18N[state.lang] || I18N.ru;
+  return dict[key] || I18N.ru[key] || key;
+}
+function fracLabel(key){ return t(FRACTIONS[key].i18n); }
+function pointById(id){ return POINTS.find(p=>p.id===id); }
+function levelOf(earned){
+  let idx = 0;
+  LEVELS.forEach((l,i)=>{ if(earned >= l.min) idx = i; });
+  const cur = LEVELS[idx];
+  const next = LEVELS[idx+1] || null;
+  const progress = next ? Math.min(100, Math.round((earned - cur.min) / (next.min - cur.min) * 100)) : 100;
+  return { idx, cur, next, progress, name: state.lang==='kz' ? cur.kz : cur.ru };
+}
+function nowStr(){
+  const d = new Date();
+  const m = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+  return `${d.getDate()} ${m[d.getMonth()]}, ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function fmt(n){ return new Intl.NumberFormat('ru-RU').format(n); }
+
+function applyI18n(){
+  $$('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  $$('[data-i18n-ph]').forEach(el=>{ el.placeholder = t(el.dataset.i18nPh); });
+}
+
+/* --- Тосты --- */
+function toast(msg, type='success', icon){
+  const root = $('#toasts');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  const ic = icon || (type==='success' ? '✓' : type==='warn' ? '!' : 'i');
+  el.innerHTML = `<span class="ti">${ic}</span><span>${msg}</span>`;
+  root.appendChild(el);
+  setTimeout(()=>{ el.classList.add('hide'); setTimeout(()=>el.remove(), 300); }, 2600);
+}
+
+/* --- Модалки --- */
+function openModal(html){
+  const root = $('#modalRoot');
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal">${html}</div></div>`;
+  root.querySelector('.modal-backdrop').addEventListener('mousedown', e=>{
+    if(e.target === e.currentTarget) closeModal();
+  });
+  document.body.classList.add('modal-open');
+}
+function closeModal(){
+  $('#modalRoot').innerHTML = '';
+  document.body.classList.remove('modal-open');
+}
+
+/* --- Генерация псевдо-QR --- */
+function fakeQR(seed){
+  let s = 7;
+  for(const ch of String(seed)) s = (s * 31 + ch.charCodeAt(0)) % 99991;
+  const N = 21;
+  let cells = '';
+  for(let y=0; y<N; y++){
+    for(let x=0; x<N; x++){
+      const inTL = x<7 && y<7, inTR = x>=N-7 && y<7, inBL = x<7 && y>=N-7;
+      let on;
+      if(inTL || inTR || inBL){
+        const lx = x<7 ? x : x-(N-7);
+        const ly = y<7 ? y : y-(N-7);
+        on = (lx===0||lx===6||ly===0||ly===6) || (lx>=2&&lx<=4&&ly>=2&&ly<=4);
+      } else {
+        s = (s * 1103515245 + 12345) % 2147483648;
+        on = ((s >> 9) & 1) === 1;
+      }
+      cells += `<i style="background:${on ? '#0F172A' : 'transparent'}"></i>`;
+    }
+  }
+  return `<div class="qr">${cells}</div>`;
+}
+
+/* ---------------------------------------------------------------------------
+   5. НАВИГАЦИЯ
+   --------------------------------------------------------------------------- */
+const NAV_ICONS = {
+  map:'<svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  scan:'<svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M4 12h16"/></svg>',
+  store:'<svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8M2 8h20v4H2zM12 8v12"/><path d="M12 8s-1-4-4-4-3 4 0 4M12 8s1-4 4-4 3 4 0 4"/></svg>',
+  taxi:'<svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17.5" cy="18" r="1.6"/></svg>',
+  profile:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>'
+};
+const NAV_ITEMS = [
+  { id:'map',     key:'nav.map' },
+  { id:'scan',    key:'nav.scan' },
+  { id:'store',   key:'nav.store' },
+  { id:'taxi',    key:'nav.taxi' },
+  { id:'profile', key:'nav.profile' }
+];
+
+function renderNav(){
+  const html = NAV_ITEMS.map(n=>`
+    <button class="nav-item" data-view="${n.id}">
+      <span class="ni">${NAV_ICONS[n.id]}</span>
+      <span class="nl">${t(n.key)}</span>
+    </button>`).join('');
+
+  $('#sidebarNav').innerHTML = html + `
+    <div class="sidebar-foot">
+      <b>EcoMap KZ</b>
+      <span>${t('sidebar.hint')}</span>
+    </div>`;
+  $('#tabbar').innerHTML = html;
+  syncNavActive();
+}
+function syncNavActive(){
+  $$('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.view === currentView));
+}
+
+function switchView(id){
+  currentView = id;
+  $$('.view').forEach(v=>v.classList.toggle('active', v.id === 'view-' + id));
+  syncNavActive();
+
+  if(id === 'map'){
+    setTimeout(()=>{ if(map) map.invalidateSize(); }, 160);
+  }
+  if(id === 'store')   renderStore();
+  if(id === 'taxi')    renderTaxi();
+  if(id === 'profile') renderProfile();
+  if(id === 'scan' && !$('#scanResult').innerHTML) renderScanIdle();
+}
+
+document.addEventListener('click', e=>{
+  const navBtn = e.target.closest('.nav-item');
+  if(navBtn){ switchView(navBtn.dataset.view); }
+});
+
+/* ---------------------------------------------------------------------------
+   6. БАЛАНС В ШАПКЕ
+   --------------------------------------------------------------------------- */
+function updateCoinPill(animate){
+  const el = $('#coinValue');
+  const from = parseInt(el.textContent.replace(/\s/g,''), 10) || 0;
+  const to = state.coins;
+  if(!animate){ el.textContent = fmt(to); return; }
+
+  const dur = 600, start = performance.now();
+  function tick(now){
+    const k = Math.min(1, (now - start) / dur);
+    const eased = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(Math.round(from + (to - from) * eased));
+    if(k < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  const pill = $('#coinPill');
+  pill.classList.add('bump');
+  setTimeout(()=>pill.classList.remove('bump'), 260);
+}
+
+function addCoins(amount, title, sub){
+  state.coins += amount;
+  if(amount > 0) state.earned += amount;
+  state.history.unshift({
+    id: 'h' + Date.now() + Math.random().toString(36).slice(2,6),
+    type: amount >= 0 ? 'in' : 'out',
+    title, sub, amount, date: nowStr()
+  });
+  if(state.history.length > 40) state.history.length = 40;
+  save();
+  updateCoinPill(true);
+}
+
+/* ---------------------------------------------------------------------------
+   7. КАРТА
+   --------------------------------------------------------------------------- */
+let map = null;
+let markersLayer = null;
+let leafletReady = false;
+let selectedPointId = null;
+
+function initMap(){
+  if(typeof L === 'undefined'){
+    buildFallbackMap();
+    return;
+  }
+  leafletReady = true;
+  const c = CITY_CENTER[state.city];
+  map = L.map('map', { zoomControl:false, attributionControl:false })
+         .setView([c.lat, c.lng], c.zoom);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19, subdomains: 'abcd'
+  }).addTo(map);
+
+  L.control.zoom({ position:'bottomright' }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+}
+
+function buildFallbackMap(){
+  const el = $('#map');
+  el.classList.add('fallback-map');
+  el.innerHTML = '<div class="fb-pins" id="fbPins" style="position:absolute;inset:0"></div>';
+}
+
+function statusColor(status){ return STATUS_META[status].color; }
+
+function visiblePoints(){
+  return POINTS.filter(p=>{
+    if(p.city !== state.city) return false;
+    if(state.filter !== 'all' && !p.accepts.includes(state.filter)) return false;
+    return true;
+  });
+}
+
+function pinIconHTML(p, active){
+  const color = statusColor(p.status);
+  return `<div class="pin-dot ${active?'is-active':''}" style="--c:${color}"><span>♻</span></div>`;
+}
+
+function renderMarkers(){
+  const pts = visiblePoints();
+
+  if(leafletReady && map){
+    markersLayer.clearLayers();
+    pts.forEach(p=>{
+      const icon = L.divIcon({
+        className:'pin',
+        html: pinIconHTML(p, p.id === selectedPointId),
+        iconSize:[38,38], iconAnchor:[19,19], popupAnchor:[0,-20]
+      });
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(markersLayer);
+      m.on('click', ()=> selectPoint(p.id));
+    });
+    return;
+  }
+
+  // fallback-карта
+  const host = $('#fbPins');
+  if(!host) return;
+  const box = CITY_CENTER[state.city].box;
+  host.innerHTML = pts.map(p=>{
+    const x = (p.lng - box.minLng) / (box.maxLng - box.minLng) * 100;
+    const y = (box.maxLat - p.lat) / (box.maxLat - box.minLat) * 100;
+    return `<button class="fb-pin" data-pid="${p.id}" style="left:${x}%;top:${y}%">
+      ${pinIconHTML(p, p.id === selectedPointId)}
+      <span class="fb-label">${p.name.split(' ')[0]}</span>
+    </button>`;
+  }).join('');
+  host.querySelectorAll('.fb-pin').forEach(btn=>{
+    btn.addEventListener('click', ()=> selectPoint(btn.dataset.pid));
+  });
+}
+
+function renderFilters(){
+  const items = [{ key:'all', icon:'✦', label:t('filter.all') }]
+    .concat(FRACTION_ORDER.map(k=>({ key:k, icon:FRACTIONS[k].icon, label:fracLabel(k) })));
+
+  $('#filters').innerHTML = items.map(f=>`
+    <button class="chip ${state.filter === f.key ? 'active' : ''}" data-filter="${f.key}">
+      <span class="e">${f.icon}</span>${f.label}
+    </button>`).join('');
+
+  $$('#filters .chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      state.filter = chip.dataset.filter;
+      save();
+      renderFilters();
+      renderMarkers();
+      if(selectedPointId){
+        const p = pointById(selectedPointId);
+        if(!visiblePoints().some(x=>x.id === p.id)) closeSheet();
+      }
+    });
+  });
+}
+
+function renderCitySwitch(){
+  $$('#citySwitch button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.city === state.city);
+    b.onclick = ()=>{
+      if(state.city === b.dataset.city) return;
+      state.city = b.dataset.city;
+      save();
+      closeSheet();
+      renderCitySwitch();
+      renderMarkers();
+      if(map){
+        const c = CITY_CENTER[state.city];
+        map.flyTo([c.lat, c.lng], c.zoom, { duration:.8 });
+      }
+    };
+  });
+}
+
+/* --------------------------- Карточка пункта --------------------------- */
+function selectPoint(id){
+  selectedPointId = id;
+  renderMarkers();
+  renderPointSheet();
+  openSheet();
+  if(map){
+    const p = pointById(id);
+    map.panTo([p.lat, p.lng], { animate:true, duration:.5 });
+  }
+}
+
+function openSheet(){
+  $('#pointSheet').classList.add('open');
+  $('#sheetBackdrop').classList.add('show');
+}
+function closeSheet(){
+  selectedPointId = null;
+  $('#pointSheet').classList.remove('open');
+  $('#sheetBackdrop').classList.remove('show');
+  renderMarkers();
+}
+$('#sheetBackdrop').addEventListener('click', closeSheet);
+
+function renderPointSheet(){
+  const p = pointById(selectedPointId);
+  if(!p) return;
+  const st = STATUS_META[p.status];
+  const fillCls = p.fill >= 90 ? 'red' : p.fill >= 70 ? 'amber' : '';
+
+  const fracRows = FRACTION_ORDER.map(k=>{
+    const f = FRACTIONS[k];
+    const on = p.accepts.includes(k);
+    return `<div class="frac-row ${on ? '' : 'off'}">
+      <span class="fe">${f.icon}</span>
+      <span class="fn">${fracLabel(k)}</span>
+      <span class="fr">${on ? `+${f.rate} <small>${t('common.coins')}/${t('point.perKg')}</small>` : '—'}</span>
+    </div>`;
+  }).join('');
+
+  $('#pointSheetBody').innerHTML = `
+    <div class="sheet-head">
+      <div style="flex:1;min-width:0">
+        <h3>${p.name}</h3>
+        ${p.verified ? `<span class="badge-pro">${t('point.verified')}</span>` : ''}
+      </div>
+      <button class="icon-btn" id="sheetClose">✕</button>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <span class="pill ${st.cls}"><span class="dot pulse"></span>${t(st.i18n)}</span>
+    </div>
+
+    <div class="sheet-meta">
+      <span>📍 <b>${p.address}</b> · ${p.dist}</span>
+      <span>🕒 ${p.hours}</span>
+      <span class="stars">★ ${p.rating.toFixed(1)}</span>
+    </div>
+
+    <div class="fill-block">
+      <div class="fill-head"><span>${t('point.fill')}</span><b>${p.fill}%</b></div>
+      <div class="bar ${fillCls}"><i style="width:${p.fill}%"></i></div>
+    </div>
+
+    <div class="frac-title">${t('point.accepts')}</div>
+    <div class="frac-list">${fracRows}</div>
+
+    <div class="sheet-actions">
+      <button class="btn ghost" id="btnUpdateStatus">🔄 ${t('point.update')}</button>
+      <button class="btn primary" id="btnCheckin">📲 ${t('point.checkin')}</button>
+    </div>
+    <div class="sheet-link">
+      <button id="btnRoute">🧭 ${t('point.route')}</button>
+    </div>
+  `;
+
+  $('#sheetClose').onclick = closeSheet;
+  $('#btnUpdateStatus').onclick = ()=> openStatusUpdate(p.id);
+  $('#btnCheckin').onclick = ()=> openCheckin(p.id);
+  $('#btnRoute').onclick = ()=>{
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`, '_blank');
+  };
+}
+
+/* ------------------- Краудсорсинг: обновление статуса ------------------- */
+function openStatusUpdate(pointId){
+  const p = pointById(pointId);
+  openModal(`
+    <h3>${t('point.update')}</h3>
+    <p class="sub">Подтвердите актуальное состояние точки — за вклад начислим <b>+5 EcoCoins</b>.</p>
+    <button class="choice" data-status="open">
+      <span class="ce">✅</span>
+      <span><b>${t('status.open')}</b><span>Пункт принимает вторсырьё прямо сейчас</span></span>
+    </button>
+    <button class="choice" data-status="filling">
+      <span class="ce">🟡</span>
+      <span><b>${t('status.filling')}</b><span>Бак заполнен на 85% — лучше поторопиться</span></span>
+    </button>
+    <button class="choice" data-status="full">
+      <span class="ce">🔴</span>
+      <span><b>${t('status.full')}</b><span>Контейнер переполнен, вывоз ожидается</span></span>
+    </button>
+    <button class="choice" data-status="closed">
+      <span class="ce">🚫</span>
+      <span><b>${t('status.closed')}</b><span>Точка закрыта или не принимает сегодня</span></span>
+    </button>
+    <div class="modal-actions">
+      <button class="btn ghost" id="mCancel">${t('common.cancel')}</button>
+    </div>
+  `);
+
+  $('#mCancel').onclick = closeModal;
+  $$('.choice[data-status]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const s = btn.dataset.status;
+      p.status = s;
+      if(s === 'full') p.fill = 98;
+      if(s === 'filling') p.fill = 85;
+      if(s === 'open' && p.fill >= 90) p.fill = 45;
+      addCoins(5, 'Бонус за обновление статуса', p.name);
+      save();
+      closeModal();
+      renderMarkers();
+      renderPointSheet();
+      toast('Статус обновлён · +5 EcoCoins', 'success', '🔄');
+    };
+  });
+}
+
+/* ------------------- QR-чек-ин + симулятор сдачи ------------------- */
+function openCheckin(pointId){
+  const p = pointById(pointId);
+  const accepted = p.accepts;
+  let picked = accepted[0];
+  let weight = 2.0;
+
+  openModal(`
+    <h3>${t('point.checkin')}</h3>
+    <p class="sub">Покажите QR-код приёмщику или воспользуйтесь симулятором, чтобы начислить EcoCoins за сдачу.</p>
+
+    <div class="qr-wrap">
+      ${fakeQR(p.id + Date.now())}
+      <div class="tiny muted" style="font-weight:700;letter-spacing:.08em">${p.name.toUpperCase()}</div>
+    </div>
+
+    <div style="height:1px;background:var(--line);margin:18px 0"></div>
+
+    <div class="field-label">Фракция</div>
+    <div class="frac-picker" id="fracPicker">
+      ${accepted.map(k=>`<button class="frac-pick ${k===picked?'active':''}" data-f="${k}">${FRACTIONS[k].icon} ${fracLabel(k)}</button>`).join('')}
+    </div>
+
+    <div class="field-label">${t('b2b.weight')}</div>
+    <div class="weight-display"><b id="wVal">2.0</b><span> ${t('common.kg')}</span></div>
+    <div class="coins-slider">
+      <input type="range" id="wRange" min="0.5" max="50" step="0.1" value="2">
+    </div>
+
+    <div style="height:14px"></div>
+    <div class="reward-calc">
+      <b id="calcVal">100</b>
+      <span>${t('common.coins')} к начислению</span>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn ghost" id="mCancel">${t('common.cancel')}</button>
+      <button class="btn primary" id="mConfirm">${t('common.confirm')}</button>
+    </div>
+  `);
+
+  const wVal = $('#wVal'), calcVal = $('#calcVal'), wRange = $('#wRange');
+
+  function recalc(){
+    const rate = FRACTIONS[picked].rate;
+    calcVal.textContent = fmt(Math.round(rate * weight));
+  }
+  function setWeight(v){
+    weight = Math.max(0.5, Math.min(50, Math.round(v * 10) / 10));
+    wVal.textContent = weight.toFixed(1);
+    wRange.value = weight;
+    recalc();
+  }
+
+  $$('#fracPicker .frac-pick').forEach(b=>{
+    b.onclick = ()=>{
+      picked = b.dataset.f;
+      $$('#fracPicker .frac-pick').forEach(x=>x.classList.toggle('active', x === b));
+      recalc();
+    };
+  });
+  wRange.oninput = ()=> setWeight(parseFloat(wRange.value));
+  recalc();
+
+  $('#mCancel').onclick = closeModal;
+  $('#mConfirm').onclick = ()=>{
+    const rate = FRACTIONS[picked].rate;
+    const coins = Math.round(rate * weight);
+    addCoins(coins, `Сдача ${fracLabel(picked).toLowerCase()} · ${weight.toFixed(1)} кг`, p.name);
+    state.totalKg = Math.round((state.totalKg + weight) * 10) / 10;
+    state.co2 = Math.round((state.co2 + weight * 2) * 10) / 10;
+    state.checkins += 1;
+    p.fill = Math.min(99, p.fill + Math.round(weight * 1.5));
+    if(p.fill >= 95) p.status = 'full';
+    save();
+    closeModal();
+    renderMarkers();
+    renderPointSheet();
+    toast(`+${fmt(coins)} EcoCoins зачислено!`, 'success', '🪙');
+  };
+}
+
+/* ---------------------------------------------------------------------------
+   8. AI-СКАНЕР
+   --------------------------------------------------------------------------- */
+const SCAN_CASES = [
+  { id:'pet', emoji:'🧴', title:'Бутылка 01 PET', sub:'Пластиковая бутылка от воды',
+    code:'01', verdict:'ok', fraction:'pet',
+    steps:[
+      'Снимите крышку и кольцо — это другой полимер (ПНД/ПП).',
+      'Сполосните и снимите термоусадочную плёнку с этикеткой.',
+      'Сомните бутылку вдоль — так в бак поместится в 3 раза больше.',
+      'Принимают: EcoPoint Al-Farabi, Recycle Hub Dostyk, EcoBox Абая.'
+    ]},
+  { id:'pp', emoji:'🥤', title:'Стаканчик 05 PP', sub:'Полипропиленовый стакан',
+    code:'05', verdict:'warn', fraction:'hdpe',
+    steps:[
+      'Промойте стаканчик от остатков напитка — иначе не примут.',
+      'Снимите крышку и трубочку (если есть) — они не перерабатываются.',
+      'Сдавайте только чистые стаканы, партией от 0.5 кг.',
+      'Принимают: Recycle Hub Dostyk, EcoBox Абая.'
+    ]},
+  { id:'other', emoji:'📦', title:'Упаковка 07 OTHER', sub:'Прочие полимеры / композиты',
+    code:'07', verdict:'no', fraction:null,
+    steps:[
+      'Смешанные материалы (07 OTHER) в Казахстане не перерабатываются.',
+      'Проверьте: если упаковка многослойная — это композит.',
+      'Замените на аналог с маркировкой 01 PET или 02 HDPE.',
+      'Опасные фракции (батарейки) сдавайте в пункт «Опасные отходы».'
+    ]}
+];
+
+function renderScanIdle(){
+  $('#scanTests').innerHTML = SCAN_CASES.map(c=>`
+    <button class="scan-test" data-case="${c.id}">
+      <span class="ste">${c.emoji}</span>
+      <span class="stt"><b>${c.title}</b><span>${c.sub}</span></span>
+      <span class="stc">${c.code}</span>
+    </button>`).join('');
+  bindScanButtons();
+}
+
+function bindScanButtons(){
+  $$('.scan-test').forEach(btn=>{
+    btn.onclick = ()=> runScan(btn.dataset.case);
+  });
+}
+
+function runScan(caseId){
+  const c = SCAN_CASES.find(x=>x.id === caseId);
+  if(!c) return;
+  const stage = $('#scannerStage');
+  stage.classList.add('scanning');
+  $('#scanResult').innerHTML = '';
+
+  setTimeout(()=>{
+    stage.classList.remove('scanning');
+    renderScanResult(c);
+  }, 1100);
+}
+
+function renderScanResult(c){
+  const isOk = c.verdict === 'ok';
+  const isWarn = c.verdict === 'warn';
+  const cls = isOk ? 'ok' : isWarn ? 'warn' : 'no';
+  const icon = isOk ? '✅' : isWarn ? '⚠️' : '⛔';
+  const title = isOk ? t('scan.accepted') : isWarn ? 'Принимается частично' : t('scan.rejected');
+
+  const fracChip = c.fraction
+    ? `<span class="pill green">${FRACTIONS[c.fraction].icon} ${fracLabel(c.fraction)} · +${FRACTIONS[c.fraction].rate} ${t('common.coins')}/${t('point.perKg')}</span>`
+    : `<span class="pill red">Не принимается</span>`;
+
+  $('#scanResult').innerHTML = `
+    <div class="verdict ${cls}">
+      <div class="verdict-head">
+        <div class="verdict-ico">${icon}</div>
+        <div>
+          <b>${title}</b>
+          <span>Маркировка ${c.code} · ${c.title}</span>
+        </div>
+      </div>
+      ${fracChip}
+      <div class="steps">
+        ${c.steps.map((s,i)=>`<div class="step"><span class="step-n">${i+1}</span><p>${s}</p></div>`).join('')}
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${c.fraction ? `<button class="btn primary" id="scanFind">🗺 ${t('scan.findPoint')}</button>` : ''}
+      <button class="btn ghost" id="scanAgain">${t('scan.rescan')}</button>
+    </div>
+  `;
+
+  const findBtn = $('#scanFind');
+  if(findBtn){
+    findBtn.onclick = ()=>{
+      state.filter = c.fraction;
+      save();
+      renderFilters();
+      renderMarkers();
+      switchView('map');
+      toast('Фильтр применён: ' + fracLabel(c.fraction), 'success', '🗺');
+    };
+  }
+  $('#scanAgain').onclick = ()=>{
+    $('#scanResult').innerHTML = '';
+    renderScanIdle();
+  };
+}
+
+/* ---------------------------------------------------------------------------
+   9. МАРКЕТПЛЕЙС
+   --------------------------------------------------------------------------- */
+function renderStore(){
+  const lv = levelOf(state.earned);
+
+  $('#storeBalance').innerHTML = `
+    <div class="balance-card fade-in">
+      <div class="bc-top">
+        <div>
+          <div class="bc-label">${t('store.balance')}</div>
+          <div class="bc-value"><span class="coin-icon lg">E</span>${fmt(state.coins)}</div>
+          <div class="bc-level">⭐ ${lv.name}</div>
+        </div>
+      </div>
+      <div class="bc-progress">
+        <div class="bar"><i style="width:${lv.progress}%"></i></div>
+        <div class="bc-progress-text">
+          <span>${lv.next ? `${fmt(state.earned)} / ${fmt(lv.next.min)}` : 'MAX'}</span>
+          <span>${lv.next ? `${lv.progress}% ${t('store.toNext')}` : '🏆'}</span>
+        </div>
+      </div>
+      <div class="bc-stats">
+        <div class="bc-stat"><b>${state.totalKg}</b><span>${t('store.kg')}</span></div>
+        <div class="bc-stat"><b>${state.co2}</b><span>${t('store.co2')}</span></div>
+        <div class="bc-stat"><b>${state.checkins}</b><span>${t('store.deals')}</span></div>
+      </div>
+    </div>`;
+
+  $('#rewardCount').textContent = REWARDS.length + ' ' + t('common.coins');
+
+  $('#rewardGrid').innerHTML = REWARDS.map(r=>{
+    const can = state.coins >= r.cost;
+    return `<div class="reward fade-in">
+      ${r.tag ? `<span class="reward-tag">${r.tag}</span>` : ''}
+      <div class="reward-emoji">${r.emoji}</div>
+      <div class="reward-title">${r.title}</div>
+      <div class="reward-partner">${r.partner}</div>
+      <div class="reward-foot">
+        <span class="reward-cost"><span class="coin-icon">E</span>${fmt(r.cost)}</span>
+        <button class="btn sm ${can ? 'primary' : 'ghost'}" data-reward="${r.id}" ${can ? '' : 'disabled'}>
+          ${can ? t('store.redeem') : t('store.need')}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  $$('[data-reward]').forEach(btn=>{
+    if(btn.disabled) return;
+    btn.onclick = ()=> openRedeem(btn.dataset.reward);
+  });
+
+  $('#challengeList').innerHTML = CHALLENGES.map(c=>{
+    const pct = Math.min(100, Math.round(c.progress / c.goal * 100));
+    return `<div class="challenge fade-in">
+      <div class="challenge-head">
+        <div class="challenge-emoji">${c.emoji}</div>
+        <div style="flex:1"><b>${c.title}</b><span>${c.partner}</span></div>
+        <span class="pill ${pct>=100?'green':'grey'}">${pct}%</span>
+      </div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="challenge-progress"><span>${c.progress} ${c.unit}</span><span>${c.goal} ${c.unit}</span></div>
+    </div>`;
+  }).join('');
+
+  const coupons = state.coupons || [];
+  $('#couponSection').innerHTML = coupons.length ? `
+    <div class="section-title">${t('store.myCoupons')}<span class="count">${coupons.length}</span></div>
+    ${coupons.map(c=>`
+      <div class="coupon fade-in">
+        <span style="font-size:22px">${c.emoji}</span>
+        <div style="flex:1;min-width:0">
+          <b style="font-size:13.5px;display:block">${c.title}</b>
+          <span class="tiny muted">${c.partner} · ${c.date}</span>
+        </div>
+        <span class="coupon-code">${c.code}</span>
+      </div>`).join('')}
+  ` : '';
+}
+
+function openRedeem(rewardId){
+  const r = REWARDS.find(x=>x.id === rewardId);
+  if(!r) return;
+  if(state.coins < r.cost){ toast('Недостаточно EcoCoins', 'warn', '!'); return; }
+
+  openModal(`
+    <h3>${t('store.redeem')}</h3>
+    <p class="sub">Вы обмениваете <b>${fmt(r.cost)} EcoCoins</b> на награду «${r.title}» от ${r.partner}.</p>
+    <div class="reward-calc">
+      <b>${fmt(state.coins - r.cost)}</b>
+      <span>останется на балансе, ${t('common.coins')}</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="mCancel">${t('common.cancel')}</button>
+      <button class="btn primary" id="mConfirm">${t('common.confirm')}</button>
+    </div>
+  `);
+  $('#mCancel').onclick = closeModal;
+  $('#mConfirm').onclick = ()=>{
+    const code = 'ECO-' + Math.random().toString(36).slice(2,6).toUpperCase() + '-' + Math.floor(1000 + Math.random()*9000);
+    state.coins -= r.cost;
+    state.history.unshift({
+      id:'h'+Date.now(), type:'out',
+      title: r.title, sub: 'Купон ' + code,
+      amount: -r.cost, date: nowStr()
+    });
+    state.coupons.unshift({ id:'c'+Date.now(), emoji:r.emoji, title:r.title, partner:r.partner, code, date: nowStr() });
+    save();
+    updateCoinPill(true);
+    closeModal();
+
+    // Экран успеха с QR
+    setTimeout(()=>{
+      openModal(`
+        <h3>Купон активирован 🎉</h3>
+        <p class="sub">Покажите этот QR-код на кассе партнёра <b>${r.partner}</b>. Код действителен 14 дней.</p>
+        <div class="qr-wrap">${fakeQR(code)}</div>
+        <div style="text-align:center;margin-top:12px">
+          <span class="coupon-code" style="font-size:15px">${code}</span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn primary block" id="mDone">${t('common.done')}</button>
+        </div>
+      `);
+      $('#mDone').onclick = closeModal;
+      toast('Купон добавлен в «Мои купоны»', 'success', '🎁');
+      renderStore();
+    }, 260);
+  };
+}
+
+/* ---------------------------------------------------------------------------
+   10. ЭКО-ТАКСИ
+   --------------------------------------------------------------------------- */
+const VOLUMES = [
+  { id:'v1', emoji:'🛍', title:'10–20 кг', sub:'2–3 пакета', price:1500 },
+  { id:'v2', emoji:'📦', title:'20–50 кг', sub:'4–6 пакетов', price:2200 },
+  { id:'v3', emoji:'🏠', title:'50+ кг',   sub:'крупный вывоз', price:3000 }
+];
+const TIME_SLOTS = ['09:00 – 12:00','12:00 – 15:00','15:00 – 18:00','18:00 – 21:00'];
+
+let taxiDraft = { volume:'v1', address:'', date:'', slot:TIME_SLOTS[3], coins:0 };
+
+function renderTaxi(){
+  const active = (state.orders || []).find(o=>o.status === 'active');
+  const host = $('#taxiContent');
+
+  const activeHtml = active ? renderActiveOrder(active) : '';
+
+  const today = new Date();
+  const iso = d => d.toISOString().slice(0,10);
+  const tomorrow = new Date(today.getTime() + 86400000);
+  if(!taxiDraft.date) taxiDraft.date = iso(tomorrow);
+
+  const vol = VOLUMES.find(v=>v.id === taxiDraft.volume) || VOLUMES[0];
+  const maxCoins = Math.min(state.coins, Math.floor(vol.price * 0.5));
+  taxiDraft.coins = Math.min(taxiDraft.coins, maxCoins);
+  const toPay = vol.price - taxiDraft.coins;
+
+  host.innerHTML = `
+    ${activeHtml}
+    <div class="card fade-in" style="margin-bottom:16px">
+      <div class="field">
+        <label class="field-label">${t('taxi.volume')}</label>
+        <div class="volume-grid" id="volGrid">
+          ${VOLUMES.map(v=>`
+            <button class="volume-opt ${v.id===taxiDraft.volume?'active':''}" data-vol="${v.id}">
+              <span class="ve">${v.emoji}</span>
+              <b>${v.title}</b>
+              <span>${v.sub}</span>
+            </button>`).join('')}
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">${t('taxi.address')}</label>
+        <input class="input" id="taxiAddress" placeholder="Алматы, ул. Абая 150, кв. 42"
+               value="${taxiDraft.address}">
+      </div>
+
+      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label class="field-label">${t('taxi.date')}</label>
+          <input class="input" type="date" id="taxiDate" value="${taxiDraft.date}" min="${iso(today)}">
+        </div>
+        <div>
+          <label class="field-label">${t('taxi.slot')}</label>
+          <select class="select" id="taxiSlot">
+            ${TIME_SLOTS.map(s=>`<option ${s===taxiDraft.slot?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="summary-row"><span>${t('taxi.price')}</span><b>${fmt(vol.price)} ₸</b></div>
+        <div class="summary-row">
+          <span>${t('taxi.payCoins')}</span>
+          <b style="color:var(--brand-dark)">− ${fmt(taxiDraft.coins)} E</b>
+        </div>
+        <div class="coins-slider">
+          <input type="range" id="coinRange" min="0" max="${maxCoins}" step="50" value="${taxiDraft.coins}">
+        </div>
+        <div class="tiny muted" style="margin-top:6px">
+          Максимум 50% от стоимости · доступно ${fmt(maxCoins)} EcoCoins
+        </div>
+        <div class="summary-row total"><span>${t('taxi.toPay')}</span><b>${fmt(toPay)} ₸</b></div>
+      </div>
+
+      <button class="btn primary block" id="taxiOrderBtn">🚚 ${t('taxi.order')}</button>
+    </div>
+  `;
+
+  $$('#volGrid .volume-opt').forEach(b=>{
+    b.onclick = ()=>{ taxiDraft.volume = b.dataset.vol; taxiDraft.coins = 0; renderTaxi(); };
+  });
+  $('#taxiAddress').oninput = e=>{ taxiDraft.address = e.target.value; };
+  $('#taxiDate').onchange = e=>{ taxiDraft.date = e.target.value; };
+  $('#taxiSlot').onchange = e=>{ taxiDraft.slot = e.target.value; };
+  $('#coinRange').oninput = e=>{ taxiDraft.coins = parseInt(e.target.value, 10) || 0; renderTaxi(); };
+
+  $('#taxiOrderBtn').onclick = ()=>{
+    if(!taxiDraft.address.trim()){
+      toast('Укажите адрес подачи', 'warn', '📍');
+      $('#taxiAddress').focus();
+      return;
+    }
+    placeOrder(vol);
+  };
+
+  const cancelBtn = $('#cancelOrderBtn');
+  if(cancelBtn){
+    cancelBtn.onclick = ()=>{
+      state.orders = (state.orders || []).filter(o=>o.status !== 'active');
+      save();
+      toast('Заказ отменён', 'warn', '✕');
+      renderTaxi();
+    };
+  }
+}
+
+function renderActiveOrder(o){
+  const steps = [1,1,0,0];
+  return `
+    <div class="order-card fade-in">
+      <div class="order-status"><span class="pill green"><span class="dot pulse"></span>${t('taxi.active')}</span></div>
+      <h3 style="font-size:17px;font-weight:800;margin:8px 0 4px;letter-spacing:-.02em">
+        ${t('taxi.courier')} · ${t('taxi.eta')} ${o.slot.split('–')[1].trim()}
+      </h3>
+      <div class="sheet-meta" style="margin-bottom:0">
+        <span>📍 <b>${o.address}</b></span>
+        <span>📅 ${o.date} · ${o.slot}</span>
+        <span>📦 ${o.volume}</span>
+      </div>
+      <div class="order-steps">
+        ${steps.map(s=>`<i class="${s?'done':''}"></i>`).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:13px">
+        <span class="muted">${t('taxi.toPay')}</span>
+        <b>${fmt(o.toPay)} ₸</b>
+      </div>
+      <button class="btn ghost block" id="cancelOrderBtn" style="margin-top:12px">${t('taxi.cancel')}</button>
+    </div>`;
+}
+
+function placeOrder(vol){
+  if(taxiDraft.coins > 0){
+    addCoins(-taxiDraft.coins, 'Оплата эко-такси EcoCoins', taxiDraft.address);
+  }
+  state.orders = (state.orders || []).filter(o=>o.status !== 'active');
+  state.orders.unshift({
+    id: 'o' + Date.now(),
+    status: 'active',
+    address: taxiDraft.address,
+    date: taxiDraft.date,
+    slot: taxiDraft.slot,
+    volume: vol.title,
+    price: vol.price,
+    toPay: vol.price - taxiDraft.coins,
+    coins: taxiDraft.coins
+  });
+  save();
+  toast('Эко-такси вызвано!', 'success', '🚚');
+  renderTaxi();
+}
+
+/* ---------------------------------------------------------------------------
+   11. ПРОФИЛЬ + B2B
+   --------------------------------------------------------------------------- */
+const LEADERBOARD = [
+  { name:'Данияр С.', score:2180, me:false },
+  { name:'Айгерим К.', score:1240, me:true  },
+  { name:'Ерасыл Т.', score:1180, me:false },
+  { name:'Мадина Ж.', score:960,  me:false },
+  { name:'Тимур А.', score:845,  me:false }
+];
+
+function renderProfile(){
+  const host = $('#profileContent');
+  if(state.b2b){ host.innerHTML = renderB2B(); bindB2B(); return; }
+
+  const lv = levelOf(state.earned);
+
+  host.innerHTML = `
+    <div class="switch-card fade-in">
+      <div>
+        <b>${t('profile.b2b')}</b>
+        <p>${t('profile.b2bSub')}</p>
+      </div>
+      <button class="switch" id="b2bSwitch" aria-label="B2B"></button>
+    </div>
+
+    <div class="profile-head">
+      <div class="avatar">АК</div>
+      <div>
+        <b>Айгерим Касымова</b>
+        <span>Студент · Алматы · ⭐ ${lv.name}</span>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><b>${fmt(state.coins)}</b><span>EcoCoins</span></div>
+      <div class="stat"><b>${state.totalKg} кг</b><span>вторсырья сдано</span></div>
+      <div class="stat"><b>${state.co2} кг</b><span>CO₂ сэкономлено</span></div>
+      <div class="stat"><b>${state.checkins}</b><span>сдач всего</span></div>
+    </div>
+
+    <div class="section-title">${t('profile.history')}<span class="count">${state.history.length}</span></div>
+    <div class="card" style="padding:6px 16px">
+      ${state.history.slice(0,12).map(h=>`
+        <div class="hist-row">
+          <div class="hist-ico ${h.type === 'out' ? 'out' : ''}">${h.type === 'out' ? '🎁' : '♻️'}</div>
+          <div class="hist-body"><b>${h.title}</b><span>${h.sub} · ${h.date}</span></div>
+          <div class="hist-amount ${h.amount >= 0 ? 'pos' : 'neg'}">${h.amount >= 0 ? '+' : ''}${fmt(h.amount)}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="section-title">${t('profile.leader')}</div>
+    <div class="card" style="padding:8px">
+      ${LEADERBOARD.sort((a,b)=>b.score-a.score).map((u,i)=>`
+        <div class="leader-row ${u.me ? 'me' : ''}">
+          <span class="rank">${i+1}</span>
+          <span class="lname">${u.name}</span>
+          <span class="lscore">${fmt(u.score)} E</span>
+        </div>`).join('')}
+    </div>
+  `;
+
+  $('#b2bSwitch').onclick = ()=>{
+    state.b2b = true;
+    save();
+    renderProfile();
+    toast('Режим партнёра включён', 'success', '🏢');
+  };
+}
+
+/* ------------------------------- B2B ------------------------------- */
+function renderB2B(){
+  const p = pointById(state.b2bPoint) || POINTS[0];
+  const st = STATUS_META[p.status];
+  const months = [
+    { m:'Дек', v:420 }, { m:'Янв', v:610 }, { m:'Фев', v:540 },
+    { m:'Мар', v:780 }, { m:'Апр', v:920 }, { m:'Май', v:1130 }
+  ];
+  const maxV = Math.max(...months.map(x=>x.v));
+
+  return `
+    <div class="switch-card fade-in" style="background:linear-gradient(135deg,#065F46,#10B981)">
+      <div>
+        <b>${t('profile.b2b')}</b>
+        <p>${t('profile.b2bSub')}</p>
+      </div>
+      <button class="switch on" id="b2bSwitch" aria-label="B2B"></button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <label class="field-label">${t('b2b.myPoint')}</label>
+      <select class="select" id="b2bPointSelect">
+        ${POINTS.map(x=>`<option value="${x.id}" ${x.id===p.id?'selected':''}>${x.name} · ${x.address}</option>`).join('')}
+      </select>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:16px 0 10px">
+        <span class="pill ${st.cls}"><span class="dot pulse"></span>${t(st.i18n)}</span>
+        <span class="tiny muted">Заполненность ${p.fill}%</span>
+      </div>
+      <div class="bar ${p.fill>=90?'red':p.fill>=70?'amber':''}" style="margin-bottom:16px"><i style="width:${p.fill}%"></i></div>
+
+      <label class="field-label">${t('b2b.setStatus')}</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${Object.keys(STATUS_META).map(s=>`
+          <button class="btn sm ${p.status===s?'primary':'outline'}" data-b2b-status="${s}">${t(STATUS_META[s].i18n)}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="field-label">${t('b2b.award')}</div>
+      <div class="field">
+        <input class="input" id="b2bPhone" placeholder="+7 (___) ___-__-__" value="+7 (707) 123-45-67">
+      </div>
+      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <select class="select" id="b2bFrac">
+          ${FRACTION_ORDER.map(k=>`<option value="${k}">${FRACTIONS[k].icon} ${fracLabel(k)} · ${FRACTIONS[k].rate} E/кг</option>`).join('')}
+        </select>
+        <input class="input" id="b2bWeight" type="number" min="0.1" step="0.1" value="3.5" placeholder="кг">
+      </div>
+      <button class="btn primary block" id="b2bAward">${t('b2b.awardBtn')}</button>
+    </div>
+
+    <div class="card">
+      <div class="field-label">${t('b2b.analytics')}</div>
+      <div class="b2b-analytics">
+        ${months.map(x=>`
+          <div class="b2b-bar">
+            <em>${x.v}</em>
+            <i style="height:${Math.round(x.v/maxV*100)}%"></i>
+            <span>${x.m}</span>
+          </div>`).join('')}
+      </div>
+      <div class="summary-row" style="border-top:1px dashed #CBD5E1;margin-top:8px;padding-top:12px">
+        <span>Всего принято за май</span><b>1 130 кг</b>
+      </div>
+      <div class="summary-row"><span>Уникальных клиентов</span><b>248</b></div>
+    </div>
+  `;
+}
+
+function bindB2B(){
+  $('#b2bSwitch').onclick = ()=>{
+    state.b2b = false;
+    save();
+    renderProfile();
+    toast('Режим пользователя', 'success', '👤');
+  };
+
+  const sel = $('#b2bPointSelect');
+  if(sel){
+    sel.onchange = ()=>{
+      state.b2bPoint = sel.value;
+      save();
+      renderProfile();
+    };
+  }
+
+  $$('[data-b2b-status]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const p = pointById(state.b2bPoint);
+      p.status = btn.dataset.b2bStatus;
+      if(p.status === 'full') p.fill = 98;
+      if(p.status === 'filling') p.fill = 85;
+      save();
+      renderMarkers();
+      renderProfile();
+      toast('Live-статус обновлён: ' + t(STATUS_META[p.status].i18n), 'success', '🔄');
+    };
+  });
+
+  const awardBtn = $('#b2bAward');
+  if(awardBtn){
+    awardBtn.onclick = ()=>{
+      const frac = $('#b2bFrac').value;
+      const weight = parseFloat($('#b2bWeight').value) || 0;
+      if(weight <= 0){ toast('Укажите вес', 'warn', '!'); return; }
+      const coins = Math.round(FRACTIONS[frac].rate * weight);
+      closeModal();
+      openModal(`
+        <h3>EcoCoins начислены ✅</h3>
+        <p class="sub">Клиент <b>${$('#b2bPhone').value}</b> получил <b>${fmt(coins)} EcoCoins</b> за ${weight} кг (${fracLabel(frac)}).</p>
+        <div class="reward-calc"><b>+${fmt(coins)}</b><span>${t('common.coins')}</span></div>
+        <div class="modal-actions"><button class="btn primary block" id="mDone">${t('common.done')}</button></div>
+      `);
+      $('#mDone').onclick = closeModal;
+      toast(`Начислено ${fmt(coins)} EcoCoins клиенту`, 'success', '🪙');
+    };
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   12. ЯЗЫК
+   --------------------------------------------------------------------------- */
+$('#langSwitch').addEventListener('click', e=>{
+  const btn = e.target.closest('.lang-opt');
+  if(!btn) return;
+  const lang = btn.dataset.lang;
+  if(state.lang === lang) return;
+  state.lang = lang;
+  save();
+  $$('.lang-opt').forEach(b=>b.classList.toggle('active', b.dataset.lang === lang));
+  applyI18n();
+  renderNav();
+  renderFilters();
+  renderCitySwitch();
+  renderPointSheetIfOpen();
+  renderScanIdle();
+  if(currentView === 'store')   renderStore();
+  if(currentView === 'taxi')    renderTaxi();
+  if(currentView === 'profile') renderProfile();
+});
+
+function renderPointSheetIfOpen(){
+  if(selectedPointId) renderPointSheet();
+}
+
+/* ---------------------------------------------------------------------------
+   13. ИНИЦИАЛИЗАЦИЯ
+   --------------------------------------------------------------------------- */
+function init(){
+  loadState();
+
+  // применяем язык к статике
+  $$('.lang-opt').forEach(b=>b.classList.toggle('active', b.dataset.lang === state.lang));
+  applyI18n();
+
+  renderNav();
+  updateCoinPill(false);
+
+  initMap();
+  renderFilters();
+  renderCitySwitch();
+  renderMarkers();
+
+  renderScanIdle();
+  renderStore();
+  renderTaxi();
+  renderProfile();
+
+  switchView('map');
+
+  // приветственный тост
+  setTimeout(()=>toast('Добро пожаловать в EcoMap KZ! ♻️', 'success', '🌿'), 600);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+// сброс демо-данных через консоль: localStorage.removeItem('ecomap_kz_v1')
+</script>
+</body>
+</html>
